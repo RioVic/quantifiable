@@ -4,6 +4,7 @@
 #include <math.h>
 #include <vector>
 #include <iostream>
+#include <fstream>
 
 #define CAS_LIMIT 3
 #define MAX_THREADS 100
@@ -34,7 +35,7 @@ class QStack
 		{
 			for (int i = 0; i < MAX_THREADS; i++) 
 			{
-        		top[i] = nullptr;
+        		top.push_back(nullptr);
       		}
 
       		for (auto &v : data)
@@ -50,9 +51,11 @@ class QStack
 
     	bool pop(int tid, int opn, T &v);
 
+    	void dumpNodes(std::ofstream &p);
+
 	private:
     	std::atomic<Node *> _stack;
-    	Node *top[MAX_THREADS]; // node pointer array for branches
+    	std::vector<Node *> top; // node pointer array for branches
     	std::vector<std::vector<Node *>> data; //Array for pre-allocated data
 };
 
@@ -133,7 +136,8 @@ bool QStack<T>::push(int tid, int opn, T v)
 }
 
 template<typename T>
-bool QStack<T>::pop(int tid, int opn, T& v) {
+bool QStack<T>::pop(int tid, int opn, T& v) 
+{
   	int loop = 0;
 
   	while (true) 
@@ -202,6 +206,28 @@ bool QStack<T>::pop(int tid, int opn, T& v) {
 		//-----------------
   		++loop;
   	}
+}
+
+template<typename T>
+void QStack<T>::dumpNodes(std::ofstream &p) 
+{
+	//Copy the thread branches and add the main branch
+	std::vector<Node *> branches = this->top;
+	branches.push_back(_stack);
+
+	//Dump each branch
+	for (auto *n : branches)
+	{
+		if (n == nullptr)
+			continue;
+
+		//Terminate when we reach the main branch, or when the main branch reaches the end
+		do
+		{
+			p << "Address: " << n << "\tValue: " << n->value() << "\tNext: " << n->next() << "\n";
+			n = n->next();
+		} while (n->next() != nullptr && n->next()->pred() == n);
+	}
 }
 
 template<typename T>
