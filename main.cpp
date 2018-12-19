@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <thread>
 #include <boost/random.hpp>
+#include <iostream>
+#include <fstream>
 
 QStack<int> *s;
 
@@ -51,4 +53,9 @@ int main(int argc, char** argv)
 
 	for (std::thread &t : threads)
 		t.join();
+
+	std::ofstream file;
+	file.open("dump.dat");
+	s->dumpNodes(file);
+	file.close();
 }
