@@ -8,15 +8,19 @@
 
 #define CAS_LIMIT 3
 
+enum Operation { Push, Pop, Fork };
+
 template<typename T>
 class QStack
 {
 public:
+	class Desc;
 	class Node;
 
 	QStack(int num_threads, int num_ops) :
 		data(num_threads),
-		num_threads(num_threads)
+		num_threads(num_threads),
+		forkRequest(nullptr)
 	{
 		top = new std::atomic<Node*>[num_threads];
 		for (int i = 0; i < num_threads; i++)
@@ -43,6 +47,7 @@ private:
 	std::atomic<Node *> *top; // node pointer array for branches
 	std::vector<std::vector<Node *>> data; //Array for pre-allocated data
 	int num_threads;
+	std::atomic<Desc *> forkRequest;
 };
 
 template<typename T>
@@ -53,29 +58,52 @@ bool QStack<T>::push(int tid, int opn, T v)
 
 	//Extract pre-allocated node
 	Node *elem = std::move(data[tid].back());
+	Desc d = new Desc(Push);
 	data[tid].pop_back();
 	elem->value(v);
+	elem->desc(d);
 
 	int loop = 0;
 	int headIndex = 0;
 
 	while (true)
 	{
+		Desc *req = forkRequest.load();
+
+		if (req != nullptr && req.active.load() == true)
+			d.op(Fork);
+
 		//Read top of stack
 		Node *cur = top[headIndex].load();
+		Desc *cur_desc = cur.desc().load();
 		elem->next(cur);
 		elem->level(headIndex);
-
-		//Attemp to update main branch
-		if (top[headIndex].compare_exchange_weak(cur, elem))
+		
+		//If no operation is occuring at current node
+		if (cur_desc.active == false)
 		{
-			if (cur != nullptr) {
-				// Lazily set the pred pointer back to elem, the new node
-				cur->pred(elem);
-				//fprintf(stdout, "tid=%02i-%05i-%03i push STAC elem=%p elem->next()=%p, cur=%p cur->next()=%p cur->pred()=%p cur->value()=%c \n", \
-				//                 tid,    opn,  loop,     elem,   elem->next(),    cur,   cur->next(),   cur->pred(),   cur->value() );
+			//Place descriptor in node
+			if (cur.desc().compare_exchange_weak(curr_desc, d))
+			{
+				//Update head (can be done without CAS since we own the current head of this branch via descriptor)
+				top[headIndex] = elem;
+
+				//Try to satisfy the fork request
+				if (req.active == true && forkRequest.active.compare_exchange_weak(req.active, false))
+				{
+					//Point an available head pointer at curr
+					for (int i = 0; i < num_threads; i++)
+					{
+						int index = (i + headIndex + 1) % this->num_threads;
+						
+						if (top[index] == nullptr)
+						{
+							if (top[index].compare_exchange_weak(nullptr, curr))
+								break;
+						}
+					}
+				}
 			}
-			return true;
 		}
 
 		// If we see a lot of contention try another branch
@@ -85,6 +113,9 @@ bool QStack<T>::push(int tid, int opn, T v)
 		}
 		++loop;
 	}
+
+	//Mark operation done
+	d.desc.active = false;
 }
 
 template<typename T>
@@ -168,9 +199,29 @@ public:
 	void level(int i) { _branch_level = i; };
 	int level() { return _branch_level; };
 
+	void desc(std::atomic<QStack::Desc> desc) { _desc = desc; };
+	std::atomic<QStack::Desc> desc() { return _desc; };
+
 private:
 	T _val {NULL};
 	Node *_next {nullptr};
 	Node *_pred {nullptr};
 	int _branch_level;
+	std::atomic<QStack::Desc> *_desc;
+};
+
+class QStack<T>::Desc
+{
+public:
+	Desc (Ops op) : _op(op) { active = true };
+	Desc () {};
+
+	Operation op() { return _op; };
+	void op(Operation o) { _op = o; };
+
+	std::atomic<bool> active;
+
+private:
+	Operation _op;
+	
 };
