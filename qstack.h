@@ -7,6 +7,7 @@
 #include <fstream>
 
 #define CAS_LIMIT 3
+#define MAX_FORK_AT_NODE 3
 
 enum Operation { Push, Pop, Fork };
 
@@ -60,34 +61,39 @@ bool QStack<T>::push(int tid, int opn, T v)
 	Node *elem = std::move(data[tid].back());
 	data[tid].pop_back();
 	elem->value(v);
-	elem->desc = new Desc(Push);
+	Desc *d = new Desc(Push);
 
 	int loop = 0;
 	int headIndex = 0;
 
 	while (true)
 	{
+		//Check for fork request
 		int req = forkRequest.load();
 
+		//If it exists, change our current op to a fork operation
 		if (req)
-			elem->desc.load()->op(Fork);
+			d->op(Fork);
 
 		//Read top of stack
 		Node *cur = top[headIndex].load();
-		Desc *cur_desc = cur->desc.load();
+		Desc *cur_desc = (cur != nullptr ? cur->desc.load() : nullptr);
 		elem->next(cur);
 		elem->level(headIndex);
 		
 		//If no operation is occuring at current node
-		if (cur_desc->active == false)
+		if (cur_desc == nullptr || cur_desc->active == false)
 		{
-			//Place descriptor in node
-			if (cur->desc.compare_exchange_weak(cur_desc, elem->desc))
+			//Place our descriptor in the node
+			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
 				//Update head (can be done without CAS since we own the current head of this branch via descriptor)
 				top[headIndex] = elem;
 
-				//Try to satisfy the fork request
+				//Since this node is at the head, we know it has room for at least 1 more predecessor, so we add our current element
+				cur->addPred(elem);
+
+				//Try to satisfy the fork request if it exists
 				if (req && forkRequest.compare_exchange_weak(req, 0))
 				{
 					//Point an available head pointer at curr
@@ -98,6 +104,7 @@ bool QStack<T>::push(int tid, int opn, T v)
 						
 						if (top_node == nullptr)
 						{
+							//CAS is necesary here since another thread may be trying to use this slot for a different head node
 							if (top[index].compare_exchange_weak(top_node, cur))
 								break;
 						}
@@ -119,8 +126,8 @@ bool QStack<T>::push(int tid, int opn, T v)
 		++loop;
 	}
 
-	//Mark operation done
-	elem->desc.load()->active = false;
+	//Mark operation done for other threads
+	d->active = false;
 }
 
 template<typename T>
@@ -128,6 +135,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 {
 	int loop = 0;
 	int headIndex = 0;
+	Desc *d = new Desc(Pop);
 
 	while (true)
 	{
@@ -136,10 +144,16 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 
 		if (cur != nullptr)
 		{
-			//If the next node is part of our currrent branch, make it the head of this branch
-			//Otherwise, we want the head of the current branch to become null
-			if (cur->next()->level() == cur->level())
-				next = cur->next();
+			Desc *cur_desc = cur->desc.load();
+
+			if (cur_desc->active == false)
+			{
+				//Place descriptor in node
+				if (cur->desc.compare_exchange_weak(cur_desc, d))
+				{
+					
+				}
+			}
 		}
 		else
 		{
@@ -181,7 +195,7 @@ void QStack<T>::dumpNodes(std::ofstream &p)
 			p << "Address: " << n << "\tValue: " << n->value() << "\tNext: " << n->next() << "\n";
 			pred = n;
 			n = n->next();
-		} while (n != nullptr && n->pred() == pred);
+		} while (n != nullptr && n->level() == pred->level());
 	}
 }
 
@@ -189,8 +203,8 @@ template<typename T>
 class QStack<T>::Node
 {
 public:
-	Node (T &v) : _val(v) {};
-	Node () {};
+	Node (T &v) : _val(v), _pred() {};
+	Node () : _pred() {};
 
 	T value() { return _val; };
 	void value(T &v) { _val = v; };
@@ -198,8 +212,26 @@ public:
 	void next(Node *n) {_next = n; };
 	Node *next() { return _next; };
 
-	void pred(Node *p) { _pred = p; };
-	Node *pred() { return _pred; };
+	void pred(Node *p, int i) { _pred[i] = p; };
+	Node **pred() { return _pred; };
+
+	void addPred(Node *p) 
+	{ 
+		for (auto &n : _pred)
+		{
+			if (n == nullptr)
+				n = p;
+		}
+	}
+
+	void removePred(Node *p)
+	{
+		for (auto &n : _pred)
+		{
+			if (n == p)
+				n = nullptr;
+		}
+	}
 
 	void level(int i) { _branch_level = i; };
 	int level() { return _branch_level; };
@@ -212,8 +244,9 @@ public:
 private:
 	T _val {NULL};
 	Node *_next {nullptr};
-	Node *_pred {nullptr};
+	Node *_pred[MAX_FORK_AT_NODE];
 	int _branch_level;
+	int _predIndex = 0;
 	
 };
 
