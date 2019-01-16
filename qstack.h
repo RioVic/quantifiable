@@ -36,6 +36,10 @@ public:
 				v.push_back(new Node());
 			}
 		}
+
+		Node *s = new Node();
+		s->sentinel(true);
+		top[0] = s;
 	}
 
 	bool push(int tid, int opn, T v);
@@ -145,7 +149,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 		Node *cur = top[headIndex].load();
 		Node *next = nullptr;
 
-		if (cur != nullptr)
+		if (!cur->isSentinel())
 		{
 			Desc *cur_desc = cur->desc.load();
 
@@ -226,6 +230,9 @@ public:
 	void pred(Node *p, int i) { _pred[i] = p; };
 	Node **pred() { return _pred; };
 
+	void sentinel(bool b) { _sentinel = b; };
+	bool isSentinel() { return _sentinel; };
+
 	void addPred(Node *p) 
 	{ 
 		for (auto &n : _pred)
@@ -269,6 +276,7 @@ private:
 	Node *_pred[MAX_FORK_AT_NODE];
 	int _branch_level;
 	int _predIndex = 0;
+	bool _sentinel = false;
 	
 };
 
