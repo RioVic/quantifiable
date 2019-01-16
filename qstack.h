@@ -113,6 +113,8 @@ bool QStack<T>::push(int tid, int opn, T v)
 			}
 		}
 
+		++loop;
+
 		// If we see a lot of contention create a fork request
 		if ((cur != nullptr) && loop > CAS_LIMIT)
 		{
@@ -122,8 +124,9 @@ bool QStack<T>::push(int tid, int opn, T v)
 			{
 				forkRequest.compare_exchange_weak(req, 1);
 			}
+
+			loop = 0;
 		}
-		++loop;
 	}
 
 	//Mark operation done for other threads
@@ -146,12 +149,26 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 		{
 			Desc *cur_desc = cur->desc.load();
 
-			if (cur_desc->active == false)
+			//Check for pending operations or head pointer updates
+			if (cur_desc->active == false && top[headIndex] == cur)
 			{
 				//Place descriptor in node
 				if (cur->desc.compare_exchange_weak(cur_desc, d))
 				{
-					
+					//Check that the pred array is empty, and that a safe pop can occur
+					if (cur->hasNoPreds())
+					{
+						v = cur->value();
+						top[headIndex] = next;
+						//delete cur;
+						return true;
+					}
+					else
+					{
+						//If there is a pred pointer, we cannot pop this node. We must go somewhere else
+						headIndex = (headIndex + 1) % this->num_threads;
+						loop = 0;
+					}
 				}
 			}
 		}
@@ -162,20 +179,14 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 			return false;
 		}
 
-		//Pop from selected head
-		if (top[headIndex].compare_exchange_weak(cur, next))
-		{
-			v = cur->value();
-			//delete cur;
-			return true;
-		}
+		++loop;
 
 		// If we see a lot of contention try another branch
 		if (loop > CAS_LIMIT)
 		{
 			headIndex = (headIndex + 1) % this->num_threads;
+			loop = 0;
 		}
-		++loop;
 	}
 }
 
@@ -231,6 +242,17 @@ public:
 			if (n == p)
 				n = nullptr;
 		}
+	}
+
+	bool hasNoPreds()
+	{
+		for (auto &n : _pred)
+		{
+			if (n != nullptr)
+				return true;
+		}
+
+		return false;
 	}
 
 	void level(int i) { _branch_level = i; };
