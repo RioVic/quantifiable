@@ -156,7 +156,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 			Desc *cur_desc = cur->desc.load();
 
 			//Check for pending operations or head pointer updates
-			if (cur_desc->active == false && top[headIndex] == cur)
+			if ((cur_desc == nullptr || cur_desc->active == false) && top[headIndex] == cur)
 			{
 				//Place descriptor in node
 				if (cur->desc.compare_exchange_weak(cur_desc, d))
@@ -258,10 +258,10 @@ public:
 		for (auto &n : _pred)
 		{
 			if (n != nullptr)
-				return true;
+				return false;
 		}
 
-		return false;
+		return true;
 	}
 
 	void level(int i) { _branch_level = i; };
