@@ -115,6 +115,7 @@ bool QStack<T>::push(int tid, int opn, T v)
 					}
 				}
 
+				d->active = false;
 				return true;
 			}
 		}
@@ -220,8 +221,8 @@ template<typename T>
 class QStack<T>::Node
 {
 public:
-	Node (T &v) : _val(v), _pred() {};
-	Node () : _pred() {};
+	Node (T &v) : _val(v), _pred(), desc(nullptr) {};
+	Node () : _pred(), desc(nullptr) {};
 
 	T value() { return _val; };
 	void value(T &v) { _val = v; };
