@@ -81,7 +81,7 @@ bool QStack<T>::push(int tid, int opn, T v)
 
 		//Read top of stack
 		Node *cur = top[headIndex].load();
-		Desc *cur_desc = (cur != nullptr ? cur->desc.load() : nullptr);
+		Desc *cur_desc = cur->desc.load();
 		elem->next(cur);
 		elem->level(headIndex);
 		
@@ -114,6 +114,8 @@ bool QStack<T>::push(int tid, int opn, T v)
 						}
 					}
 				}
+
+				return true;
 			}
 		}
 
