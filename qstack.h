@@ -167,6 +167,8 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 					{
 						v = cur->value();
 						top[headIndex] = cur->next();
+						cur->next()->removePred(cur);
+						d->active = false;
 						//delete cur;
 						return true;
 					}
@@ -175,6 +177,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 						//If there is a pred pointer, we cannot pop this node. We must go somewhere else
 						headIndex = (headIndex + 1) % this->num_threads;
 						loop = 0;
+						d->active = false;
 					}
 				}
 			}
