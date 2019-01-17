@@ -166,7 +166,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 					if (cur->hasNoPreds())
 					{
 						v = cur->value();
-						top[headIndex] = next;
+						top[headIndex] = cur->next();
 						//delete cur;
 						return true;
 					}
