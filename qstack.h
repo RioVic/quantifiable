@@ -6,7 +6,7 @@
 #include <iostream>
 #include <fstream>
 
-#define CAS_LIMIT 3
+#define CAS_LIMIT 1
 #define MAX_FORK_AT_NODE 3
 
 enum Operation { Push, Pop, Fork };
@@ -19,7 +19,6 @@ public:
 	class Node;
 
 	QStack(int num_threads, int num_ops) :
-		data(num_threads),
 		num_threads(num_threads),
 		forkRequest(0)
 	{
@@ -27,14 +26,7 @@ public:
 		for (int i = 0; i < num_threads; i++)
 		{
 			top[i] = nullptr;
-		}
-
-		for (auto &v : data)
-		{
-			for (int i = 0; i < num_ops / num_threads; i++)
-			{
-				v.push_back(new Node());
-			}
+			threadIndex.push_back(0);
 		}
 
 		Node *s = new Node();
@@ -48,9 +40,14 @@ public:
 
 	void dumpNodes(std::ofstream &p);
 
+	std::vector<int> headIndexStats = {0,0,0,0,0,0,0,0};
+	std::vector<int> threadIndex;
+	int branches = 1;
+
 private:
 	std::atomic<Node *> *top; // node pointer array for branches
-	std::vector<std::vector<Node *>> data; //Array for pre-allocated data
+	Node NodeAlloc[8][5000000]; //Array for pre-allocated data
+	Desc DescAlloc[8][5000000]; //Array for pre-allocated data
 	int num_threads;
 	std::atomic<int> forkRequest;
 };
@@ -58,21 +55,18 @@ private:
 template<typename T>
 bool QStack<T>::push(int tid, int opn, T v)
 {
-	if (data[tid].size() == 0)
-		return false;
-
 	//Extract pre-allocated node
-	Node *elem = std::move(data[tid].back());
-	data[tid].pop_back();
+	Node *elem = &NodeAlloc[tid][opn];
 	elem->value(v);
-	Desc *d = new Desc(Push);
+	Desc *d = &DescAlloc[tid][opn];
+	d->op(Push);
 
 	int loop = 0;
-	int headIndex = 0;
 
 	while (true)
 	{
 		//Check for fork request
+		int headIndex = threadIndex[tid];
 		int req = forkRequest.load();
 
 		//If it exists, change our current op to a fork operation
@@ -81,6 +75,13 @@ bool QStack<T>::push(int tid, int opn, T v)
 
 		//Read top of stack
 		Node *cur = top[headIndex].load();
+
+		if (cur == nullptr) 
+		{
+			threadIndex[tid] = (headIndex + 1) % this->num_threads;
+			continue;
+		}
+
 		Desc *cur_desc = cur->desc.load();
 		elem->next(cur);
 		elem->level(headIndex);
@@ -91,6 +92,7 @@ bool QStack<T>::push(int tid, int opn, T v)
 			//Place our descriptor in the node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
+				//headIndexStats[headIndex]++;
 				//Update head (can be done without CAS since we own the current head of this branch via descriptor)
 				top[headIndex] = elem;
 
@@ -110,7 +112,10 @@ bool QStack<T>::push(int tid, int opn, T v)
 						{
 							//CAS is necesary here since another thread may be trying to use this slot for a different head node
 							if (top[index].compare_exchange_weak(top_node, cur))
+							{
+								branches++;
 								break;
+							}
 						}
 					}
 				}
@@ -127,12 +132,14 @@ bool QStack<T>::push(int tid, int opn, T v)
 		{
 			int req = forkRequest.load();
 
-			if (!req)
+			if (!req && branches < this->num_threads)
 			{
 				forkRequest.compare_exchange_weak(req, 1);
 			}
 
 			loop = 0;
+			threadIndex[tid] = (headIndex + 1) % this->num_threads;
+			//headIndex = (headIndex + 1) % this->num_threads;
 		}
 	}
 
@@ -144,13 +151,19 @@ template<typename T>
 bool QStack<T>::pop(int tid, int opn, T& v)
 {
 	int loop = 0;
-	int headIndex = 0;
-	Desc *d = new Desc(Pop);
+	Desc *d = &DescAlloc[tid][opn];
+	d->op(Pop);
 
 	while (true)
 	{
+		int headIndex = threadIndex[tid];
 		Node *cur = top[headIndex].load();
-		Node *next = nullptr;
+
+		if (cur == nullptr) 
+		{
+			threadIndex[tid] = (headIndex + 1) % this->num_threads;
+			continue;
+		}
 
 		if (!cur->isSentinel())
 		{
@@ -166,8 +179,8 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 					if (cur->hasNoPreds())
 					{
 						v = cur->value();
-						top[headIndex] = cur->next();
 						cur->next()->removePred(cur);
+						top[headIndex] = cur->next();
 						d->active = false;
 						//delete cur;
 						return true;
@@ -175,7 +188,8 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 					else
 					{
 						//If there is a pred pointer, we cannot pop this node. We must go somewhere else
-						headIndex = (headIndex + 1) % this->num_threads;
+						top[headIndex] = nullptr;
+						threadIndex[tid] = (headIndex + 1) % this->num_threads;
 						loop = 0;
 						d->active = false;
 					}
@@ -194,7 +208,8 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 		// If we see a lot of contention try another branch
 		if (loop > CAS_LIMIT)
 		{
-			headIndex = (headIndex + 1) % this->num_threads;
+			threadIndex[tid] = (headIndex + 1) % this->num_threads;
+			//headIndex = (headIndex + 1) % this->num_threads;
 			loop = 0;
 		}
 	}
@@ -241,19 +256,25 @@ public:
 
 	void addPred(Node *p) 
 	{ 
-		for (auto &n : _pred)
+		for (auto n : _pred)
 		{
 			if (n == nullptr)
+			{
 				n = p;
+				return;
+			}
 		}
 	}
 
 	void removePred(Node *p)
 	{
-		for (auto &n : _pred)
+		for (auto n : _pred)
 		{
 			if (n == p)
+			{
 				n = nullptr;
+				return;
+			}
 		}
 	}
 
