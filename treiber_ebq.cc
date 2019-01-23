@@ -267,7 +267,6 @@ private:
 	std::atomic<Node*> head;
 		
 	Node nodeAlloc[MAX_THREADS+1][MAX_OPS];
-	Node *n;
 	Node root;	
 	EliminationArray<T> *eliminationArray;
 
@@ -285,7 +284,7 @@ public:
 
 	void push(int tid, int i, T x) {
         ++numPush;
-		n = &nodeAlloc[tid][i];  // use allocated node
+		Node *n = &nodeAlloc[tid][i];  // use allocated node
 		n->val = x;
 
 		for (;;) {
