@@ -23,10 +23,16 @@ public:
 		forkRequest(0)
 	{
 		top = new std::atomic<Node*>[num_threads];
+		NodeAlloc = new Node*[num_threads];
+		DescAlloc = new Desc*[num_threads];
+
 		for (int i = 0; i < num_threads; i++)
 		{
 			top[i] = nullptr;
 			threadIndex.push_back(0);
+
+			NodeAlloc[i] = new Node[num_ops];
+			DescAlloc[i] = new Desc[num_ops];
 		}
 
 		Node *s = new Node();
@@ -46,8 +52,8 @@ public:
 
 private:
 	std::atomic<Node *> *top; // node pointer array for branches
-	Node NodeAlloc[8][5000000]; //Array for pre-allocated data
-	Desc DescAlloc[8][5000000]; //Array for pre-allocated data
+	Node **NodeAlloc; //Array for pre-allocated data
+	Desc **DescAlloc; //Array for pre-allocated data
 	int num_threads;
 	std::atomic<int> forkRequest;
 };
