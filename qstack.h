@@ -204,8 +204,6 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 		}
 		else
 		{
-			//If curr does not exist, the main branch is empty. Push to sub-tree
-			v = int('?');
 			return false;
 		}
 
