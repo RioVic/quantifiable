@@ -39,7 +39,7 @@ int main(int argc, char** argv)
 {
 	if (argc < 4)
 	{
-		std::cout << "Please use: " << argv[0] << " <number of threads> <number of operations> <percentage of pushes>\n";
+		std::cout << "Please use: " << argv[0] << " <number of threads> <number of operations> <percentage of pushes> <\"QStack\" | \"Treiber\" | \"EBS\"> \n";
 		return -1;
 	}
 

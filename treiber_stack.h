@@ -62,8 +62,9 @@ class Treiber_S {
         }
 
         bool pop(int tid, int opn, T &v) {
+            Node *t;
             do {
-                Node *t = head.load();
+                t = head.load();
                 //Empty stack
                 if (!(t->next))
                     return false;
