@@ -1,4 +1,6 @@
 #include "qstack.h"
+#include "treiber_stack.cc"
+#include "elim_backoff.cc"
 #include <iostream>
 #include <cstdlib>
 #include <thread>
@@ -8,6 +10,8 @@
 #include <time.h>
 
 QStack<int> *s;
+Treiber_S *treiber;
+EliminationBackoffStack<int> *ebs;
 
 void work(int thread_id, int num_ops, int push_ratio)
 {
