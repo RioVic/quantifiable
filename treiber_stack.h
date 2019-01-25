@@ -53,35 +53,21 @@ class Treiber_S {
         }
 
         bool push(int tid, int i, T item) {
-            Node *t = head.load();
             Node *n = &nodeArray[tid][i];
             n->val = item; 
-            spin = 0; 
             do {
-            	++spin;
-                t = head.load();
-                n->next = t;
-            } while (!head.compare_exchange_weak(t, n));        
-            numOps++;
-            size++;
+                n->next = head.load();
+            } while (!head.compare_exchange_weak(n->next, n));        
             return true;
         }
 
         bool pop(int tid, int opn, T &v) {
-        	++numOps;
-            Node *t;
-            Node *n;
             do {
-                t = head.load();
-
+                Node *t = head.load();
                 //Empty stack
                 if (!(t->next))
                     return false;
-
-                n = t->next;
-            } while (!head.compare_exchange_weak(t, n));
-            //numOps++;
-            size--;
+            } while (!head.compare_exchange_weak(t, t->next));
             v = t->val;
             return true;
         }

@@ -148,14 +148,15 @@ public:
 
 	bool push(int tid, int i, T x) 
 	{
-        ++numPush;
 		Node *n = &nodeAlloc[tid][i];
 		n->val = x;
 
 		for (;;) {
 			n->next = head.load();
 			if (head.compare_exchange_weak(n->next, n))
+			{
 				return true; 
+			}
 			else try {
 				if (!eliminationArray->visit(x))
 					return true; 
@@ -169,7 +170,6 @@ public:
 
 	bool pop(int tid, int i, T &x) 
 	{
-		++numPop;
 		for (;;) {
 			Node *t = head.load();
 
