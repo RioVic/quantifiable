@@ -40,6 +40,18 @@ public:
 		top[0] = s;
 	}
 
+	~QStack()
+	{
+		for (int i = 0; i < num_threads; i++)
+		{
+			delete[] NodeAlloc[i];
+			delete[] DescAlloc[i];
+		}
+
+		delete[] NodeAlloc;
+		delete[] DescAlloc;
+	}
+
 	bool push(int tid, int opn, T v);
 
 	bool pop(int tid, int opn, T &v);
