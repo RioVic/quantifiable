@@ -1,4 +1,6 @@
-#include "stackAdaptor.h"
+#include "qstack.h"
+#include "ebs.h"
+#include "treiber_stack.h"
 #include <iostream>
 #include <cstdlib>
 #include <thread>
