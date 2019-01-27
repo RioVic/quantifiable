@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <time.h>
+#include <string>
 
 QStack<int> *q = nullptr;
 Treiber_S<int> *treiber = nullptr;
@@ -49,7 +50,7 @@ int main(int argc, char** argv)
 	char* MODE = argv[4];
 
 	std::ofstream file;
-	file.open("qstack.out");
+	file.open(std::string(MODE) + std::to_string(RATIO_PUSH) + std::string(".dat"));
 	file << "type\tmix\tthreads\tms\tops\t\n";
 
 	for (int k = 1; k <= NUM_THREADS; k++)
