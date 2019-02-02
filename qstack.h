@@ -44,6 +44,10 @@ public:
 
 	bool pop(int tid, int opn, T &v);
 
+	bool add(int tid, int opn, T v, int index, Node *cur, Node *elem);
+
+	bool remove(int tid, int opn, T &v, int index, Node *cur);
+
 	void dumpNodes(std::ofstream &p);
 
 	std::vector<int> headIndexStats = {0,0,0,0,0,0,0,0};
@@ -75,10 +79,6 @@ bool QStack<T>::push(int tid, int opn, T v)
 		int headIndex = threadIndex[tid];
 		int req = forkRequest.load();
 
-		//If it exists, change our current op to a fork operation
-		if (req)
-			d->op(Fork);
-
 		//Read top of stack
 		Node *cur = top[headIndex].load();
 
@@ -98,36 +98,27 @@ bool QStack<T>::push(int tid, int opn, T v)
 			//Place our descriptor in the node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
-				//headIndexStats[headIndex]++;
-				//Update head (can be done without CAS since we own the current head of this branch via descriptor)
-				top[headIndex] = elem;
-
-				//Since this node is at the head, we know it has room for at least 1 more predecessor, so we add our current element
-				cur->addPred(elem);
-
-				//Try to satisfy the fork request if it exists
-				if (req && forkRequest.compare_exchange_weak(req, 0))
+				if (cur_desc->op == Pop)
 				{
-					//Point an available head pointer at curr
-					for (int i = 0; i < num_threads; i++)
+					//Remove this node instead of pushing
+					if (!this->remove(tid, opn, v, headIndex, cur))
 					{
-						int index = (i + headIndex + 1) % this->num_threads;
-						Node *top_node = top[index];
-						
-						if (top_node == nullptr)
-						{
-							//CAS is necesary here since another thread may be trying to use this slot for a different head node
-							if (top[index].compare_exchange_weak(top_node, cur))
-							{
-								branches++;
-								break;
-							}
-						}
+						d->active = false;
+						threadIndex[tid] = (headIndex + 1) % this->num_threads;
+					}
+					else
+					{
+						d->active = false;
+						return true;
 					}
 				}
-
-				d->active = false;
-				return true;
+				else
+				{
+					//Add node as usual
+					this->add(tid, opn, v, headIndex, cur, elem);
+					d->active = false;
+					return true;
+				}
 			}
 		}
 
@@ -171,42 +162,38 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 			continue;
 		}
 
-		if (!cur->isSentinel())
-		{
-			Desc *cur_desc = cur->desc.load();
+		Desc *cur_desc = cur->desc.load();
 
-			//Check for pending operations or head pointer updates
-			if ((cur_desc == nullptr || cur_desc->active == false) && top[headIndex] == cur)
+		//Check for pending operations or head pointer updates
+		if ((cur_desc == nullptr || cur_desc->active == false) && top[headIndex] == cur)
+		{
+			//Place descriptor in node
+			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
-				//Place descriptor in node
-				if (cur->desc.compare_exchange_weak(cur_desc, d))
+				if (cur->isSentinel())
 				{
-					//Check that the pred array is empty, and that a safe pop can occur
-					if (cur->hasNoPreds())
+					Node *elem = &NodeAlloc[tid][opn];
+
+					//Append pop operation instead of removing (there are no available nodes to pop)
+					this->add(tid, opn, v, headIndex, cur, elem);
+					d->active = false;
+					return true;
+				}
+				else
+				{
+					//Attempt to remove as normal
+					if (!this->remove(tid, opn, v, headIndex, cur))
 					{
-						v = cur->value();
-						cur->next()->removePred(cur);
-						top[headIndex] = cur->next();
 						d->active = false;
-						//delete cur;
-						return true;
+						threadIndex[tid] = (headIndex + 1) % this->num_threads;
 					}
 					else
 					{
-						//If there is a pred pointer, we cannot pop this node. We must go somewhere else
-						top[headIndex] = nullptr;
-						threadIndex[tid] = (headIndex + 1) % this->num_threads;
-						loop = 0;
 						d->active = false;
+						return true;
 					}
 				}
 			}
-		}
-		else
-		{
-			//If curr does not exist, the main branch is empty. Push to sub-tree
-			v = int('?');
-			return false;
 		}
 
 		++loop;
@@ -219,6 +206,58 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 			loop = 0;
 		}
 	}
+}
+
+//Adds an arbitrary operation to the stack
+template<typename T>
+bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
+{
+	//Update head (can be done without CAS since we own the current head of this branch via descriptor)
+	top[headIndex] = elem;
+
+	//Since this node is at the head, we know it has room for at least 1 more predecessor, so we add our current element
+	cur->addPred(elem);
+
+	//Try to satisfy the fork request if it exists
+	if (req && forkRequest.compare_exchange_weak(req, 0))
+	{
+		//Point an available head pointer at curr
+		for (int i = 0; i < num_threads; i++)
+		{
+			int index = (i + headIndex + 1) % this->num_threads;
+			Node *top_node = top[index];
+			
+			if (top_node == nullptr)
+			{
+				//CAS is necesary here since another thread may be trying to use this slot for a different head node
+				if (top[index].compare_exchange_weak(top_node, cur))
+				{
+					branches++;
+					break;
+				}
+			}
+		}
+	}
+}
+
+//Removes an arbitrary operation from the stack
+template<typename T>
+bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
+{
+	//Check that the pred array is empty, and that a safe pop can occur
+	if (cur->hasNoPreds())
+	{
+		v = cur->value();
+		cur->next()->removePred(cur);
+		top[index] = cur->next();
+		return true;
+	}
+	else
+	{
+		//If there is a pred pointer, we cannot pop this node. We must go somewhere else
+		top[headIndex] = nullptr;
+		return false;
+	}	
 }
 
 template<typename T>
