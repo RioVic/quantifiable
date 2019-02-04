@@ -80,11 +80,12 @@ bool QStack<T>::push(int tid, int opn, T v)
 	d->op(Push);
 
 	int loop = 0;
+	int headIndex = 0;
 
 	while (true)
 	{
 		//Check for fork request
-		int headIndex = threadIndex[tid];
+		//int headIndex = threadIndex[tid];
 		int req = forkRequest.load();
 
 		//If it exists, change our current op to a fork operation
@@ -96,7 +97,7 @@ bool QStack<T>::push(int tid, int opn, T v)
 
 		if (cur == nullptr) 
 		{
-			threadIndex[tid] = (headIndex + 1) % this->num_threads;
+			headIndex = (headIndex + 1) % this->num_threads;
 			continue;
 		}
 
@@ -156,7 +157,7 @@ bool QStack<T>::push(int tid, int opn, T v)
 			}
 
 			loop = 0;
-			threadIndex[tid] = (headIndex + 1) % this->num_threads;
+			headIndex = (headIndex + 1) % this->num_threads;
 			//headIndex = (headIndex + 1) % this->num_threads;
 		}
 	}
@@ -172,14 +173,16 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 	Desc *d = &DescAlloc[tid][opn];
 	d->op(Pop);
 
+	int headIndex = 0;
+
 	while (true)
 	{
-		int headIndex = threadIndex[tid];
+		//int headIndex = threadIndex[tid];
 		Node *cur = top[headIndex].load();
 
 		if (cur == nullptr) 
 		{
-			threadIndex[tid] = (headIndex + 1) % this->num_threads;
+			headIndex = (headIndex + 1) % this->num_threads;
 			continue;
 		}
 
@@ -207,7 +210,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 					{
 						//If there is a pred pointer, we cannot pop this node. We must go somewhere else
 						top[headIndex] = nullptr;
-						threadIndex[tid] = (headIndex + 1) % this->num_threads;
+						headIndex = (headIndex + 1) % this->num_threads;
 						loop = 0;
 						d->active = false;
 					}
@@ -224,8 +227,8 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 		// If we see a lot of contention try another branch
 		if (loop > CAS_LIMIT)
 		{
-			threadIndex[tid] = (headIndex + 1) % this->num_threads;
-			//headIndex = (headIndex + 1) % this->num_threads;
+			//threadIndex[tid] = (headIndex + 1) % this->num_threads;
+			headIndex = (headIndex + 1) % this->num_threads;
 			loop = 0;
 		}
 	}
