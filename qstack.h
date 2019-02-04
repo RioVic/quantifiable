@@ -5,6 +5,7 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 
 #define CAS_LIMIT 1
 #define MAX_FORK_AT_NODE 3
@@ -68,8 +69,8 @@ bool QStack<T>::push(int tid, int opn, T v)
 	//Extract pre-allocated node
 	Node *elem = &NodeAlloc[tid][opn];
 	elem->value(v);
+	elem->type(Push);
 	Desc *d = &DescAlloc[tid][opn];
-	d->op(Push);
 
 	int loop = 0;
 
@@ -90,7 +91,6 @@ bool QStack<T>::push(int tid, int opn, T v)
 
 		Desc *cur_desc = cur->desc.load();
 		elem->next(cur);
-		elem->level(headIndex);
 		
 		//If no operation is occuring at current node
 		if (cur_desc == nullptr || cur_desc->active == false)
@@ -98,7 +98,14 @@ bool QStack<T>::push(int tid, int opn, T v)
 			//Place our descriptor in the node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
-				if (cur_desc->op == Pop)
+				if (cur->isSentinel() || cur->type() == Push)
+				{
+					//Add node as usual
+					this->add(tid, opn, v, headIndex, cur, elem);
+					d->active = false;
+					return true;
+				}
+				else
 				{
 					//Remove this node instead of pushing
 					if (!this->remove(tid, opn, v, headIndex, cur))
@@ -111,13 +118,6 @@ bool QStack<T>::push(int tid, int opn, T v)
 						d->active = false;
 						return true;
 					}
-				}
-				else
-				{
-					//Add node as usual
-					this->add(tid, opn, v, headIndex, cur, elem);
-					d->active = false;
-					return true;
 				}
 			}
 		}
@@ -149,7 +149,6 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 {
 	int loop = 0;
 	Desc *d = &DescAlloc[tid][opn];
-	d->op(Pop);
 
 	while (true)
 	{
@@ -170,9 +169,11 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 			//Place descriptor in node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
-				if (cur->isSentinel())
+				if (cur->isSentinel() || cur->type() == Pop)
 				{
 					Node *elem = &NodeAlloc[tid][opn];
+					elem->type(Pop);
+					elem->next(cur);
 
 					//Append pop operation instead of removing (there are no available nodes to pop)
 					this->add(tid, opn, v, headIndex, cur, elem);
@@ -218,6 +219,8 @@ bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 	//Since this node is at the head, we know it has room for at least 1 more predecessor, so we add our current element
 	cur->addPred(elem);
 
+	int req = forkRequest.load();
+
 	//Try to satisfy the fork request if it exists
 	if (req && forkRequest.compare_exchange_weak(req, 0))
 	{
@@ -249,7 +252,7 @@ bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
 	{
 		v = cur->value();
 		cur->next()->removePred(cur);
-		top[index] = cur->next();
+		top[headIndex] = cur->next();
 		return true;
 	}
 	else
@@ -273,10 +276,10 @@ void QStack<T>::dumpNodes(std::ofstream &p)
 		//Terminate when we reach the main branch, or when the main branch reaches the end
 		do
 		{
-			p << "Address: " << n << "\tValue: " << n->value() << "\tNext: " << n->next() << "\n";
+			p << std::left << "Address: " << std::setw(10) << n << "\t\tNext: " << std::setw(10) << n->next() << "\t\tValue: " << std::setw(10) << n->value() << "\t\tType:" << std::setw(10) << (Operation)n->type() << "\n";;
 			pred = n;
 			n = n->next();
-		} while (n != nullptr && n->level() == pred->level());
+		} while (n != nullptr);
 	}
 }
 
@@ -298,6 +301,10 @@ public:
 
 	void sentinel(bool b) { _sentinel = b; };
 	bool isSentinel() { return _sentinel; };
+
+	void type(Operation type) { _type = type; };
+	Operation type() { return _type; };
+
 
 	void addPred(Node *p) 
 	{ 
@@ -349,6 +356,7 @@ private:
 	int _branch_level;
 	int _predIndex = 0;
 	bool _sentinel = false;
+	Operation _type;
 	
 };
 
