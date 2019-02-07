@@ -7,6 +7,12 @@
 #include<ctime>
 #include<time.h>
 
+#define ELIM_CAPACITY 10000 // capacity of elimination array
+#define ELIM_TIMEOUT 1000
+#define EMPTY 0
+#define WAITING 1
+#define BUSY 2
+
 template<typename T> class LockFreeExchanger {
     std::atomic<uint64_t> slot;
 
@@ -72,10 +78,6 @@ public:
     }
 };
 
-
-// The EliminationArray hods the pendng pops and pushes to be matched
-// Herlihy and Shavit, Page 252
-
 template<typename T> class EliminationArray {
 private:
 	LockFreeExchanger<T> **exchanger;
@@ -99,10 +101,6 @@ public:
 	}
 };
 
-
-// The EliminationBackoffStack implements the data structure for a low contention stack
-// Herlihy and Shavit, Page 253
-
 template<class T> class EliminationBackoffStack {
 private:
     struct Node {
@@ -116,10 +114,13 @@ private:
 	Node **nodeAlloc;
 	Node root;	
 	EliminationArray<T> *eliminationArray;
+	int num_threads;
 
 public:
-	EliminationBackoffStack(int num_threads, int num_ops) {
-        root.val = '?';
+	EliminationBackoffStack(int num_threads, int num_ops) :
+	num_threads(num_threads)
+	{
+        root.val = -1;
         root.next = NULL;
         head.store(&root);
 
@@ -145,39 +146,49 @@ public:
         delete[] nodeAlloc;
     }
 
-	void push(int tid, int i, T x) 
+	bool push(int tid, int i, T x) 
 	{
-        ++numPush;
-		Node *n = &nodeAlloc[tid][i];  // use allocated node
+		Node *n = &nodeAlloc[tid][i];
 		n->val = x;
 
 		for (;;) {
 			n->next = head.load();
 			if (head.compare_exchange_weak(n->next, n))
-				return; 
+			{
+				return true; 
+			}
 			else try {
 				if (!eliminationArray->visit(x))
-					return; 
+					return true; 
 			} catch (const char *e) {
 				continue;
 			}
 		}
+
+		return false;
 	}
 
-	T pop() 
+	bool pop(int tid, int i, T &x) 
 	{
-		++numPop;
-		//fprintf(stdout, "      pop-----.6. \n");
 		for (;;) {
 			Node *t = head.load();
-			//fprintf(stdout, "      pop-----.6.            t=%p t->val=%c \n", t, t->val);
-            if (!(t->next)) return '?';  // returns ? for empty stack	
+
+            if (!(t->next)) 
+            	return false;
+
 			if (head.compare_exchange_weak(t, t->next))
-				return t->val;
+			{
+				x = t->val;
+				return true;
+			}
+
 			else try {
 				T other = eliminationArray->visit((T)NULL);
 				if (other)
-					return other;
+				{
+					x = other;
+					return true;
+				}
 			} catch (const char *e) {
 				continue;
 			}

@@ -1,6 +1,6 @@
 #include "qstack.h"
-#include "treiber_stack.cc"
-#include "elim_backoff.cc"
+#include "ebs.h"
+#include "treiber_stack.h"
 #include <iostream>
 #include <cstdlib>
 #include <thread>
@@ -8,12 +8,14 @@
 #include <iostream>
 #include <fstream>
 #include <time.h>
+#include <string>
 
-QStack<int> *s;
-Treiber_S *treiber;
-EliminationBackoffStack<int> *ebs;
+QStack<int> *q = nullptr;
+Treiber_S<int> *treiber = nullptr;
+EliminationBackoffStack<int> *ebs = nullptr;
 
-void work(int thread_id, int num_ops, int push_ratio)
+template<class T>
+void work(int thread_id, int num_ops, int push_ratio, T *s)
 {
 	boost::mt19937 randomGen;
 	randomGen.seed(time(0));
@@ -40,16 +42,17 @@ int main(int argc, char** argv)
 {
 	if (argc < 4)
 	{
-		std::cout << "Please use: " << argv[0] << " <number of threads> <number of operations> <percentage of pushes>\n";
+		std::cout << "Please use: " << argv[0] << " <number of threads> <number of operations> <percentage of pushes> <\"QStack\" | \"Treiber\" | \"EBS\"> \n";
 		return -1;
 	}
 
 	int NUM_THREADS = atoi(argv[1]);
 	int NUM_OPS = atoi(argv[2]);
 	int RATIO_PUSH = atoi(argv[3]);
+	char* MODE = argv[4];
 
 	std::ofstream file;
-	file.open("qstack.out");
+	file.open(std::string(MODE) + std::to_string(RATIO_PUSH) + std::string(".dat"));
 	file << "type\tmix\tthreads\tms\tops\t\n";
 
 	for (int k = 1; k <= NUM_THREADS; k++)
@@ -59,22 +62,58 @@ int main(int argc, char** argv)
 		{
 			std::cout << "iter: " << i << "\n";
 			std::vector<std::thread> threads;
-			s = new QStack<int>(k, NUM_OPS);
-			auto start = std::chrono::high_resolution_clock::now();
 
-			for (int i = 0; i < k; i++)
+			if (strcmp(MODE, "QStack") == 0)
 			{
-				threads.push_back(std::thread(work, i, NUM_OPS, RATIO_PUSH));
+				QStack<int> *s = new QStack<int>(k, NUM_OPS);
+				auto start = std::chrono::high_resolution_clock::now();
+
+				for (int j = 0; j < k; j++)
+					threads.push_back(std::thread(&work<QStack<int>>, j, NUM_OPS, RATIO_PUSH, s));
+
+				for (std::thread &t : threads)
+					t.join();
+
+				auto end = std::chrono::high_resolution_clock::now();
+				auto elapsed = end-start;
+
+				file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << k << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS*k << "\n";
+				delete s;
 			}
+			else if (strcmp(MODE, "Treiber") == 0)
+			{
+				Treiber_S<int> *s = new Treiber_S<int>(k, NUM_OPS);
+				auto start = std::chrono::high_resolution_clock::now();
 
-			for (std::thread &t : threads)
-				t.join();
+				for (int j = 0; j < k; j++)
+					threads.push_back(std::thread(&work<Treiber_S<int>>, j, NUM_OPS, RATIO_PUSH, s));
 
-			auto end = std::chrono::high_resolution_clock::now();
-			auto elapsed = end-start;
+				for (std::thread &t : threads)
+					t.join();
 
-			file << "qstack\t" << "0-100-0\t" << k << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS*k << "\n";
-			delete s;
+				auto end = std::chrono::high_resolution_clock::now();
+				auto elapsed = end-start;
+
+				file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << k << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS*k << "\n";
+				delete s;
+			}
+			else if (strcmp(MODE, "EBS") == 0)
+			{
+				EliminationBackoffStack<int> *s = new EliminationBackoffStack<int>(k, NUM_OPS);
+				auto start = std::chrono::high_resolution_clock::now();
+
+				for (int j = 0; j < k; j++)
+					threads.push_back(std::thread(&work<EliminationBackoffStack<int>>, j, NUM_OPS, RATIO_PUSH, s));
+
+				for (std::thread &t : threads)
+					t.join();
+
+				auto end = std::chrono::high_resolution_clock::now();
+				auto elapsed = end-start;
+
+				file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << k << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS*k << "\n";
+				delete s;
+			}
 		}
 	}
 	
