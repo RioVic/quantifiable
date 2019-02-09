@@ -20,14 +20,14 @@ public:
 	QQueue(int num_threads, int num_ops) :
 		num_threads(num_threads)
 	{
-		head = new std::atomic<Node*>[num_threads];
-		tail = new std::atomic<Node*>[num_threads];
+		_head = new std::atomic<Node*>[num_threads];
+		_tail = new std::atomic<Node*>[num_threads];
 		NodeAlloc = new Node*[num_threads];
 
 		for (int i = 0; i < num_threads; i++)
 		{
-			head[i] = nullptr;
-			tail[i] = nullptr;
+			_head[i] = nullptr;
+			_tail[i] = nullptr;
 			threadIndex.push_back(i);
 
 			NodeAlloc[i] = new Node[num_ops];
@@ -52,8 +52,8 @@ public:
 	int branches = 1;
 
 private:
-	std::atomic<Node *> *head; // node pointer array for branches
-	std::atomic<Node *> *tail; // node pointer array for branches
+	std::atomic<Node *> *_head; // node pointer array for branches
+	std::atomic<Node *> *_tail; // node pointer array for branches
 	Node **NodeAlloc; //Array for pre-allocated data
 	int num_threads;
 };
@@ -66,25 +66,41 @@ bool QQueue<T>::enqueue(int tid, int opn, T v)
 	elem->value(v);
 	elem->op(Enqueue);
 	int Index = threadIndex[tid];
+	Node *head;
+	Node *tail;
+	Node *tail_next;
+	Node *head_next;
 
 	while (true)
 	{
-		//Read front of queue
-		Node *cur = head[Index].load();
+		//Read the queue
+		head = _head[Index].load();
+		tail = _tail[Index].load();
+		tail_next = tail->next.load();
+		head_next = head->next.load();
+
+		//Lazily catch up tail pointer
+		if (tail_next == nullptr)
+		{
+			_tail[Index].compare_exchange_weak(tail, tail_next);
+			continue;
+		}
 
 		//Check if the queue is empty, or that there are no pending dequeue operations that need to be matched
-		if (cur != nullptr || cur->op() == Enqueue)
+		if (head_next == nullptr || tail->op() == Enqueue)
 		{
 			//Enqueue as normal
-			elem->next(cur);
-	
-			if (head[Index].compare_exchange_weak(cur, elem))
+			if (tail->next.compare_exchange_weak(tail_next, elem))
+			{
+				//Lazily try to update the tail pointer
+				_tail[Index].compare_exchange_weak(tail, elem);
 				return true;
+			}
 		}
 		else
 		{
-			//Remove the pending dequeue operation
-			if (head[Index].compare_exchange_weak(cur, cur->next()))
+			//Remove the pending dequeue operation at the head
+			if (_head[Index].compare_exchange_weak(head, head_next))
 				return true;
 		}	
 	}
@@ -94,32 +110,47 @@ template<typename T>
 bool QQueue<T>::dequeue(int tid, int opn, T& v)
 {
 	int Index = threadIndex[tid];
+	Node *head;
+	Node *tail;
+	Node *tail_next;
+	Node *head_next;
 
 	while (true)
 	{
-		//Read front of queue
-		Node *cur = tail[Index].load();
+		//Read the queue
+		head = _head[Index].load();
+		tail = _tail[Index].load();
+		tail_next = tail->next.load();
+		head_next = head->next.load();
+
+		//Lazily catch up tail pointer
+		if (tail_next == nullptr)
+		{
+			_tail[Index].compare_exchange_weak(tail, tail_next);
+			continue;
+		}
 
 		//Check if the queue if there are any nodes to dequeue, or that there are other dequeues waiting for a matching enqueue
-		if (cur == nullptr || cur->op() == Dequeue)
+		if (head_next == nullptr || tail->op() == Dequeue)
 		{
 			//Add this dequeue operation to the queue as a pending operation
 			Node *elem = &NodeAlloc[tid][opn];
 			elem->value(v);
 			elem->op(Dequeue);
-			cur = head[Index].load();
-
-			if (head[Index].compare_exchange_weak(cur, elem))
+			
+			if (tail->next.compare_exchange_weak(tail_next, elem))
+			{
+				//Lazily try to update the tail pointer
+				_tail[Index].compare_exchange_weak(tail, elem);
 				return true;
+			}
 		}
 		else
 		{
+			v = head->value();
 			//Dequeue as normal
-			if (tail[Index].compare_exchange_weak(cur, cur->next()))
-			{
-				v = cur->value();
+			if (_head[Index].compare_exchange_weak(head, head_next))
 				return true;
-			}
 		}
 	}
 }
@@ -134,14 +165,12 @@ public:
 	T value() { return _val; };
 	void value(T &v) { _val = v; };
 
-	void next(Node *n) {_next = n; };
-	Node *next() { return _next; };
-
 	Operation op() { return _op; };
 	void op(Operation op) { _op = op; };
 
+	std::atomic<Node *> next {nullptr};
+
 private:
 	T _val {NULL};
-	Node *_next {nullptr};
 	Operation _op;
 };
