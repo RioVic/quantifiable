@@ -1,6 +1,5 @@
 # Victor Cook
-# COP6616 Programming Assignment 3
-# Elimination Backoff Stack
+# Plot results for PODC paper
 
 library(tidyverse)
 setwd('C:/Users/zpain/Desktop/Qstack')
