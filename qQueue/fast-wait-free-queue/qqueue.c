@@ -5,6 +5,18 @@
 
 void queue_init(queue_t * q, int nprocs)
 {
+	q->nprocs = nprocs;
+	q->head = malloc(q->nprocs * sizeof(node_t *));
+	q->tail = malloc(q->nprocs * sizeof(node_t *));
+
+	for (int i = 0; i < q->nprocs; i++)
+	{
+		node_t *node = malloc(sizeof(node_t));
+  		node->next = NULL;
+
+  		q->head[i] = node;
+  		q->tail[i] = node;
+	}
 }
 
 void queue_register(queue_t * q, handle_t * th, int id)
@@ -18,6 +30,7 @@ void enqueue(queue_t * q, handle_t * handle, void * data)
 	node_t *node = malloc(sizeof(node_t));
 
 	node->data = data;
+	node->next = NULL;
   	node->op = 1;
 
   	int index = handle->id;
@@ -27,17 +40,22 @@ void enqueue(queue_t * q, handle_t * handle, void * data)
   	node_t *head_next;
   	node_t *tail_next;
 
+  	int loop = 0;
+
   	while (1)
 	{
+		loop++;
 		//Read the queue
 		tail = hzdptr_setv(&q->tail[index], &handle->hzd, 0);
-		head = hzdptr_setv(&q->head[index], &handle->hzd, 1);
-		tail_next = hzdptr_setv(&tail->next, &handle->hzd, 2);
-		head_next = hzdptr_setv(&head->next, &handle->hzd, 3);
+		head = hzdptr_set(&q->head[index], &handle->hzd, 1);
+		tail_next = hzdptr_set(&tail->next, &handle->hzd, 2);
+		head_next = hzdptr_set(&head->next, &handle->hzd, 3);
+
 
 		//If tail_next is null, we must lazily catch up the tail pointer
 		if (tail_next != NULL)
 		{
+			//printf("Hey\n");
 			CAS(&q->tail[index], &tail, tail_next);
 			continue;
 		}
@@ -80,10 +98,10 @@ void * dequeue(queue_t * q, handle_t * handle)
 	while (1)
 	{
 		//Read the queue
-		tail = hzdptr_setv(&q->tail[index], &handle->hzd, 0);
+		tail = hzdptr_set(&q->tail[index], &handle->hzd, 0);
 		head = hzdptr_setv(&q->head[index], &handle->hzd, 1);
-		tail_next = hzdptr_setv(&tail->next, &handle->hzd, 2);
-		head_next = hzdptr_setv(&head->next, &handle->hzd, 3);
+		tail_next = hzdptr_set(&tail->next, &handle->hzd, 2);
+		head_next = hzdptr_set(&head->next, &handle->hzd, 3);
 
 		//If tail_next is null, we must lazily catch up the tail pointer
 		if (tail_next != NULL)
@@ -97,6 +115,7 @@ void * dequeue(queue_t * q, handle_t * handle)
 		{
 			//Add this dequeue operation to the queue as a pending operation
 			node_t *node = malloc(sizeof(node_t));
+			node->next = NULL;
 			node->op = 0;
 
 			//Add our node to the list, update the tail pointer lazily
