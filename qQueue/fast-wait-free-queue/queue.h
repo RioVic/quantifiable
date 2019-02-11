@@ -13,11 +13,11 @@
 #elif MSQUEUE
 #include "msqueue.h"
 
-#elif FAAQ
-#include "align.h"
-
 #elif QQUEUE
 #include "qqueue.h"
+
+#elif FAAQ
+#include "align.h"
 
 typedef struct {
   volatile long P DOUBLE_CACHE_ALIGNED;
