@@ -27,13 +27,13 @@ void enqueue(queue_t * q, handle_t * handle, void * data)
   	node_t *head_next;
   	node_t *tail_next;
 
-  	while (true)
+  	while (1)
 	{
 		//Read the queue
 		tail = hzdptr_setv(&q->tail[index], &handle->hzd, 0);
 		head = hzdptr_setv(&q->head[index], &handle->hzd, 1);
-		tail_next = hzdptr_set(&tail->next, &handle->hzd, 2);
-		head_next = hzdptr_set(&head->next, &handle->hzd, 3);
+		tail_next = hzdptr_setv(&tail->next, &handle->hzd, 2);
+		head_next = hzdptr_setv(&head->next, &handle->hzd, 3);
 
 		//If tail_next is null, we must lazily catch up the tail pointer
 		if (tail_next != NULL)
@@ -77,13 +77,13 @@ void * dequeue(queue_t * q, handle_t * handle)
   	node_t *head_next;
   	node_t *tail_next;
 
-	while (true)
+	while (1)
 	{
 		//Read the queue
 		tail = hzdptr_setv(&q->tail[index], &handle->hzd, 0);
 		head = hzdptr_setv(&q->head[index], &handle->hzd, 1);
-		tail_next = hzdptr_set(&tail->next, &handle->hzd, 2);
-		head_next = hzdptr_set(&head->next, &handle->hzd, 3);
+		tail_next = hzdptr_setv(&tail->next, &handle->hzd, 2);
+		head_next = hzdptr_setv(&head->next, &handle->hzd, 3);
 
 		//If tail_next is null, we must lazily catch up the tail pointer
 		if (tail_next != NULL)

@@ -1,4 +1,4 @@
-TESTS = wfqueue wfqueue0 lcrq ccqueue msqueue faa delay
+TESTS = qqueue wfqueue wfqueue0 lcrq ccqueue msqueue faa delay
 
 CC = gcc
 CFLAGS = -g -Wall -O3 -pthread -D_GNU_SOURCE
@@ -38,6 +38,7 @@ wfqueue wfqueue0: CFLAGS += -DWFQUEUE
 lcrq: CFLAGS += -DLCRQ
 ccqueue: CFLAGS += -DCCQUEUE
 msqueue: CFLAGS += -DMSQUEUE
+qqueue: CFLAGS += -DQQUEUE
 faa: CFLAGS += -DFAAQ
 delay: CFLAGS += -DDELAY
 
@@ -48,7 +49,7 @@ else
 $(TESTS): pairwise.o
 endif
 
-msqueue lcrq: hzdptr.o xxhash.o
+msqueue lcrq qqueue: hzdptr.o xxhash.o
 
 clean:
 	rm -f $(TESTS) *.o

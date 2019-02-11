@@ -16,6 +16,9 @@
 #elif FAAQ
 #include "align.h"
 
+#elif QQUEUE
+#include "qqueue.h"
+
 typedef struct {
   volatile long P DOUBLE_CACHE_ALIGNED;
   volatile long C DOUBLE_CACHE_ALIGNED;
