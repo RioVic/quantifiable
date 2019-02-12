@@ -26,8 +26,10 @@ public:
 
 		for (int i = 0; i < num_threads; i++)
 		{
-			_head[i] = nullptr;
-			_tail[i] = nullptr;
+			Node *node = new Node();
+			node->next = nullptr;
+			_head[i] = node;
+			_tail[i] = node;
 			threadIndex.push_back(i);
 
 			NodeAlloc[i] = new Node[num_ops];
@@ -80,7 +82,7 @@ bool QQueue<T>::enqueue(int tid, int opn, T v)
 		head_next = head->next.load();
 
 		//Lazily catch up tail pointer
-		if (tail_next == nullptr)
+		if (tail_next != nullptr)
 		{
 			_tail[Index].compare_exchange_weak(tail, tail_next);
 			continue;
@@ -124,7 +126,7 @@ bool QQueue<T>::dequeue(int tid, int opn, T& v)
 		head_next = head->next.load();
 
 		//Lazily catch up tail pointer
-		if (tail_next == nullptr)
+		if (tail_next != nullptr)
 		{
 			_tail[Index].compare_exchange_weak(tail, tail_next);
 			continue;
