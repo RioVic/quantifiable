@@ -213,6 +213,16 @@ int main(int argc, const char *argv[])
   printf("  Mean of elapsed time: %.2f ms\n", mean);
   printf("===========================================\n");
 
+  char filename[25];
+  strcpy(filename, "out/");
+  strcat(filename, argv[0]+2);
+  strcat(filename, ".dat");
+  FILE *fp = fopen(filename, "a+");
+
+  fprintf(fp, "%s\t50-50\t%d\t%.2f\t10000000\n", argv[0]+2, nprocs, mean);
+
+  fclose(fp);
+
   pthread_barrier_destroy(&barrier);
   return verify(nprocs, res);
 }
