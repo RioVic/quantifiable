@@ -65,11 +65,11 @@ int main(int argc, char** argv)
 
 			if (strcmp(MODE, "QStack") == 0)
 			{
-				QStack<int> *s = new QStack<int>(k, NUM_OPS);
+				QStack<int> *s = new QStack<int>(k, NUM_OPS/k);
 				auto start = std::chrono::high_resolution_clock::now();
 
 				for (int j = 0; j < k; j++)
-					threads.push_back(std::thread(&work<QStack<int>>, j, NUM_OPS, RATIO_PUSH, s));
+					threads.push_back(std::thread(&work<QStack<int>>, j, NUM_OPS/k, RATIO_PUSH, s));
 
 				for (std::thread &t : threads)
 					t.join();
@@ -77,16 +77,16 @@ int main(int argc, char** argv)
 				auto end = std::chrono::high_resolution_clock::now();
 				auto elapsed = end-start;
 
-				file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << k << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS*k << "\n";
+				file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << k << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
 				delete s;
 			}
 			else if (strcmp(MODE, "Treiber") == 0)
 			{
-				Treiber_S<int> *s = new Treiber_S<int>(k, NUM_OPS);
+				Treiber_S<int> *s = new Treiber_S<int>(k, NUM_OPS/k);
 				auto start = std::chrono::high_resolution_clock::now();
 
 				for (int j = 0; j < k; j++)
-					threads.push_back(std::thread(&work<Treiber_S<int>>, j, NUM_OPS, RATIO_PUSH, s));
+					threads.push_back(std::thread(&work<Treiber_S<int>>, j, NUM_OPS/k, RATIO_PUSH, s));
 
 				for (std::thread &t : threads)
 					t.join();
@@ -94,16 +94,16 @@ int main(int argc, char** argv)
 				auto end = std::chrono::high_resolution_clock::now();
 				auto elapsed = end-start;
 
-				file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << k << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS*k << "\n";
+				file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << k << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
 				delete s;
 			}
 			else if (strcmp(MODE, "EBS") == 0)
 			{
-				EliminationBackoffStack<int> *s = new EliminationBackoffStack<int>(k, NUM_OPS);
+				EliminationBackoffStack<int> *s = new EliminationBackoffStack<int>(k, NUM_OPS/k);
 				auto start = std::chrono::high_resolution_clock::now();
 
 				for (int j = 0; j < k; j++)
-					threads.push_back(std::thread(&work<EliminationBackoffStack<int>>, j, NUM_OPS, RATIO_PUSH, s));
+					threads.push_back(std::thread(&work<EliminationBackoffStack<int>>, j, NUM_OPS/k, RATIO_PUSH, s));
 
 				for (std::thread &t : threads)
 					t.join();
@@ -111,7 +111,7 @@ int main(int argc, char** argv)
 				auto end = std::chrono::high_resolution_clock::now();
 				auto elapsed = end-start;
 
-				file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << k << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS*k << "\n";
+				file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << k << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
 				delete s;
 			}
 		}
