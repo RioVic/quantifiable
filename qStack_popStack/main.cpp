@@ -54,68 +54,59 @@ int main(int argc, char** argv)
 	std::ofstream file;
 	file.open(std::string(MODE) + std::to_string(RATIO_PUSH) + std::string(".dat"), std::ios_base::app);
 
-	std::vector<std::thread> threads;
-
-	if (strcmp(MODE, "QStack") == 0)
+	for (int i = 0; i < 5; i++)
 	{
-		QStack<int> *s = new QStack<int>(NUM_THREADS, NUM_OPS);
-		auto start = std::chrono::high_resolution_clock::now();
+		std::vector<std::thread> threads;
+		if (strcmp(MODE, "QStack") == 0)
+		{
+			QStack<int> *s = new QStack<int>(NUM_THREADS, NUM_OPS);
+			auto start = std::chrono::high_resolution_clock::now();
 
-		for (int j = 0; j < NUM_THREADS; j++)
-			threads.push_back(std::thread(&work<QStack<int>>, j, NUM_OPS, RATIO_PUSH, s));
+			for (int j = 0; j < NUM_THREADS; j++)
+				threads.push_back(std::thread(&work<QStack<int>>, j, NUM_OPS, RATIO_PUSH, s));
 
-		for (std::thread &t : threads)
-			t.join();
+			for (std::thread &t : threads)
+				t.join();
 
-		auto end = std::chrono::high_resolution_clock::now();
-		auto elapsed = end-start;
+			auto end = std::chrono::high_resolution_clock::now();
+			auto elapsed = end-start;
 
-		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
-		delete s;
+			file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS*NUM_THREADS << "\n";
+			delete s;
+		}
+		else if (strcmp(MODE, "Treiber") == 0)
+		{
+			Treiber_S<int> *s = new Treiber_S<int>(NUM_THREADS, NUM_OPS);
+			auto start = std::chrono::high_resolution_clock::now();
+
+			for (int j = 0; j < NUM_THREADS; j++)
+				threads.push_back(std::thread(&work<Treiber_S<int>>, j, NUM_OPS, RATIO_PUSH, s));
+
+			for (std::thread &t : threads)
+				t.join();
+
+			auto end = std::chrono::high_resolution_clock::now();
+			auto elapsed = end-start;
+
+			file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS*NUM_THREADS << "\n";
+			delete s;
+		}
+		else if (strcmp(MODE, "EBS") == 0)
+		{
+			EliminationBackoffStack<int> *s = new EliminationBackoffStack<int>(NUM_THREADS, NUM_OPS);
+			auto start = std::chrono::high_resolution_clock::now();
+
+			for (int j = 0; j < NUM_THREADS; j++)
+				threads.push_back(std::thread(&work<EliminationBackoffStack<int>>, j, NUM_OPS, RATIO_PUSH, s));
+
+			for (std::thread &t : threads)
+				t.join();
+
+			auto end = std::chrono::high_resolution_clock::now();
+			auto elapsed = end-start;
+
+			file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS*NUM_THREADS << "\n";
+			delete s;
+		}
 	}
-	else if (strcmp(MODE, "Treiber") == 0)
-	{
-		Treiber_S<int> *s = new Treiber_S<int>(NUM_THREADS, NUM_OPS);
-		auto start = std::chrono::high_resolution_clock::now();
-
-		for (int j = 0; j < NUM_THREADS; j++)
-			threads.push_back(std::thread(&work<Treiber_S<int>>, j, NUM_OPS, RATIO_PUSH, s));
-
-		for (std::thread &t : threads)
-			t.join();
-
-		auto end = std::chrono::high_resolution_clock::now();
-		auto elapsed = end-start;
-
-		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
-		delete s;
-	}
-	else if (strcmp(MODE, "EBS") == 0)
-	{
-		EliminationBackoffStack<int> *s = new EliminationBackoffStack<int>(NUM_THREADS, NUM_OPS);
-		auto start = std::chrono::high_resolution_clock::now();
-
-		for (int j = 0; j < NUM_THREADS; j++)
-			threads.push_back(std::thread(&work<EliminationBackoffStack<int>>, j, NUM_OPS, RATIO_PUSH, s));
-
-		for (std::thread &t : threads)
-			t.join();
-
-		auto end = std::chrono::high_resolution_clock::now();
-		auto elapsed = end-start;
-
-		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
-		delete s;
-	}
-	
-
-	/*
-	for (int i : s->headIndexStats)
-	{
-		std::cout << i << "\n";
-	}*/
-
-	//file.open("dump.dat");
-	//s->dumpNodes(file);
-	//file.close();
 }
