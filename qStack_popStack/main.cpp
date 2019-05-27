@@ -40,7 +40,7 @@ void work(int thread_id, int num_ops, int push_ratio, T *s)
 
 int main(int argc, char** argv)
 {
-	if (argc < 4)
+	if (argc < 5 || strcmp(argv[1],"--help") == 0)
 	{
 		std::cout << "Please use: " << argv[0] << " <number of threads> <number of operations> <percentage of pushes> <\"QStack\" | \"Treiber\" | \"EBS\"> \n";
 		return -1;
@@ -106,4 +106,10 @@ int main(int argc, char** argv)
 		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
 		delete s;
 	}
+	else
+	{
+		std::cout << "Argument 4 not recognized, please retry\n";
+		return -1;
+	}
+
 }
