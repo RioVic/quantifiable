@@ -141,7 +141,7 @@ bool QStack<T>::push(int tid, int opn, T v)
 		{
 			int req = forkRequest.load();
 
-			if (!req && branches < this->num_threads)
+			if (!req && this->branches < this->num_threads)
 			{
 				forkRequest.compare_exchange_weak(req, 1);
 			}
@@ -227,6 +227,7 @@ bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 {
 	//Update head (can be done without CAS since we own the current head of this branch via descriptor)
 	top[headIndex] = elem;
+	elem->level(headIndex);
 
 	//Since this node is at the head, we know it has room for at least 1 more predecessor, so we add our current element
 	cur->addPred(elem);
@@ -247,7 +248,7 @@ bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 				//CAS is necesary here since another thread may be trying to use this slot for a different head node
 				if (top[index].compare_exchange_weak(top_node, cur))
 				{
-					branches++;
+					this->branches++;
 					break;
 				}
 			}
@@ -270,7 +271,12 @@ bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
 	else
 	{
 		//If there is a pred pointer, we cannot pop this node. We must go somewhere else
-		top[headIndex] = nullptr;
+		if (top[headIndex] == cur)
+		{
+			std::cout << this->branches << "\n";
+			this->branches--;
+			top[headIndex] = nullptr;
+		}
 		return false;
 	}	
 }
@@ -280,6 +286,7 @@ void QStack<T>::dumpNodes(std::ofstream &p)
 {
 	for (int i = 0; i < this->num_threads; i++)
 	{
+		p << "Printing branch: " << i << "\n";
 		Node *n = this->top[i].load();
 		Node *pred = nullptr;
 		if (n == nullptr)
@@ -288,11 +295,17 @@ void QStack<T>::dumpNodes(std::ofstream &p)
 		//Terminate when we reach the main branch, or when the main branch reaches the end
 		do
 		{
-			p << std::left << "Address: " << std::setw(10) << n << "\t\tNext: " << std::setw(10) << n->next() << "\t\tValue: " << std::setw(10) << n->value() << "\t\tType:" << std::setw(10) << (Operation)n->type() << "\n";;
+			if (n->pred()[1] != nullptr)
+			{
+				p << "Fork here, " << n->pred()[0] << "\t" << n->pred()[1] << "\n";
+			}
+			p << std::left << "Address: " << std::setw(10) << n << "\t\tNext: " << std::setw(10) << n->next() << "\t\tValue: " << std::setw(10) << n->value() << "\t\tType:" << std::setw(10) << (Operation)n->type() << std::setw(10) << "\t\tlevel:" << std::setw(10) << n->level() << "\n";
 			pred = n;
 			n = n->next();
-		} while (n != nullptr);
+		} while (n != nullptr && n->level() == i);
 	}
+
+	p << "branches: " << this->branches << "\n";
 }
 
 template<typename T>
@@ -320,7 +333,7 @@ public:
 
 	void addPred(Node *p) 
 	{ 
-		for (auto n : _pred)
+		for (auto &n : _pred)
 		{
 			if (n == nullptr)
 			{
@@ -332,7 +345,7 @@ public:
 
 	void removePred(Node *p)
 	{
-		for (auto n : _pred)
+		for (auto &n : _pred)
 		{
 			if (n == p)
 			{
