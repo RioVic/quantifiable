@@ -9,14 +9,14 @@
 
 template<typename T>
 class Treiber_S {
-	struct Node 
+    struct Node 
     {
-	    T val;
-	    Node *next;
-	};
+        T val;
+        Node *next;
+    };
 
-	Node **nodeArray;
-	Node root, rootp;
+    Node **nodeArray;
+    Node root, rootp;
 
     std::atomic<Node*> head, pending;
     std::atomic<int> numOps;
