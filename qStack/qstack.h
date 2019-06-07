@@ -189,8 +189,9 @@ template<typename T>
 bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 {
 	int predIndex = 0;
+	int forksAllowed = (branches < MAX_FORK_AT_NODE) ? MAX_FORK_AT_NODE : 1;
 
-	while (predIndex < MAX_FORK_AT_NODE)
+	while (predIndex < forksAllowed)
 	{
 		Node *pred = cur->_pred[predIndex];
 
@@ -220,6 +221,15 @@ bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 			}
 			else if (predIndex == 1) //Case 2: Initializing a new top pointer. This needs CAS as multiple thread may be trying to do the same at different nodes
 			{
+				//Re-use branch
+				//We got to this fork from a branch that has been completely popped away, but not removed yet
+				//If we want, we can re-use it.
+				/*if (top[headIndex] == curr)
+				{
+					top[headIndex] = elem;
+					elem->level(headIndex);
+				}*/
+
 				//Point an available top pointer at curr
 				for (int i = 0; i < num_threads; i++)
 				{
@@ -293,7 +303,8 @@ bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
 
 	//We need CAS for the unlinking cur, since a pop operation may be attempting to pop cur->next() (Even though it would be unable to)
 	Node *next = cur->next();
-	for (int i = 0; i < MAX_FORK_AT_NODE; i++)
+	int i;
+	for (i = 0; i < MAX_FORK_AT_NODE; i++)
 	{
 		if (next->_pred[i] == cur)
 		{
@@ -307,8 +318,16 @@ bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
 		}
 	}
 
-	//Since this thread did the marking, no other thread may update top[headIndex] (Push and Pop would stop after seeing the marked pointer)
-	top[headIndex] = cur->next();
+	//We have popped our way back to a fork node, so the current top pointer should be nulled
+	if (i > 0)
+	{
+		top[headIndex] = nullptr;
+	}
+	else
+	{
+		//Since this thread did the marking, no other thread may update top[headIndex] (Push and Pop would stop after seeing the marked pointer)
+		top[headIndex] = cur->next();
+	}
 
 	return true;
 }
