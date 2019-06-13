@@ -68,9 +68,9 @@ int main(int argc, char** argv)
 
 		auto end = std::chrono::high_resolution_clock::now();
 		auto elapsed = end-start;
-		s->dumpNodes(file);
+		//s->dumpNodes(file);
 
-		//file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
+		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
 		delete s;
 	}
 	else if (strcmp(MODE, "Treiber") == 0)
