@@ -1,5 +1,5 @@
 CC = g++
-CC_FLAGS = -std=c++11
+CC_FLAGS = -std=c++11 -g
 L_FLAGS = -lpthread
  
 SOURCES = $(wildcard *.cpp)
