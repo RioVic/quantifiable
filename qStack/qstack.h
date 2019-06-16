@@ -53,13 +53,13 @@ public:
 		delete[] NodeAlloc;
 	}
 
-	bool push(int tid, int opn, T v);
+	bool push(int tid, int opn, T ins, T &v, int &popOpn);
 
 	bool pop(int tid, int opn, T &v);
 
 	bool add(int tid, int opn, T v, int index, Node *cur, Node *elem);
 
-	bool remove(int tid, int opn, T &v, int index, Node *cur);
+	bool remove(int tid, int opn, T &v, int index, Node *cur, int &popOpn);
 
 	void dumpNodes(std::ofstream &p);
 
@@ -75,12 +75,13 @@ private:
 };
 
 template<typename T>
-bool QStack<T>::push(int tid, int opn, T v)
+bool QStack<T>::push(int tid, int opn, T ins, T &v, int &popOpn)
 {
 	//Extract pre-allocated node
 	Node *elem = &NodeAlloc[tid][opn];
-	elem->value(v);
+	elem->value(ins);
 	elem->type(Push);
+	elem->opn(opn);
 
 	int loop = 0;
 
@@ -102,13 +103,13 @@ bool QStack<T>::push(int tid, int opn, T v)
 		if (cur->isSentinel() || cur->type() == Push)
 		{
 			//Add node as usual
-			if (this->add(tid, opn, v, headIndex, cur, elem))
+			if (this->add(tid, opn, ins, headIndex, cur, elem))
 				return true;
 		}
 		else
 		{
 			//Remove this node instead of pushing
-			if (!this->remove(tid, opn, v, headIndex, cur))
+			if (!this->remove(tid, opn, v, headIndex, cur, popOpn))
 			{
 				threadIndex[tid] = (headIndex + 1) % this->num_threads;
 			}
@@ -152,6 +153,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 			Node *elem = &NodeAlloc[tid][opn];
 			elem->type(Pop);
 			elem->next(cur);
+			elem->opn(opn);
 
 			//Append pop operation instead of removing (there are no available nodes to pop)
 			if (this->add(tid, opn, v, headIndex, cur, elem))
@@ -159,8 +161,10 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 		}
 		else
 		{
+			int pushOpn;
+			
 			//Attempt to remove as normal
-			if (!this->remove(tid, opn, v, headIndex, cur))
+			if (!this->remove(tid, opn, v, headIndex, cur, pushOpn))
 			{
 				threadIndex[tid] = (headIndex + 1) % this->num_threads;
 			}
@@ -270,7 +274,7 @@ bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 //Check each pred pointer is null, then mark it
 //If successful, remove the node
 template<typename T>
-bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
+bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int &popOpn)
 {
 	//Concurrent pop is already marking this node, we may not do the same
 	if (IS_MARKED(cur->_pred[0].load()))
@@ -300,6 +304,7 @@ bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
 	
 	//Marking complete, we are free to remove the node from the stack
 	v = cur->value();
+	popOpn = cur->opn();
 
 	//We need CAS for the unlinking cur, since a pop operation may be attempting to pop cur->next() (Even though it would be unable to)
 	Node *next = cur->next();
@@ -379,6 +384,9 @@ public:
 	void type(Operation type) { _type = type; };
 	Operation type() { return _type; };
 
+	void opn(int n) { _opn = n; };
+	int opn() { return _opn; };
+
 	void removePred(Node *p)
 	{
 		for (auto &n : _pred)
@@ -417,5 +425,6 @@ private:
 	int _predIndex = 0;
 	bool _sentinel = false;
 	Operation _type;
+	int _opn;
 	
 };

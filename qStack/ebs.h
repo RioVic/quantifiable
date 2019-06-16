@@ -146,7 +146,7 @@ public:
         delete[] nodeAlloc;
     }
 
-	bool push(int tid, int i, T x) 
+	bool push(int tid, int i, T x, T &v, int &popOpn) 
 	{
 		Node *n = &nodeAlloc[tid][i];
 		n->val = x;

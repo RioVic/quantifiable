@@ -14,6 +14,16 @@ QStack<int> *q = nullptr;
 Treiber_S<int> *treiber = nullptr;
 EliminationBackoffStack<int> *ebs = nullptr;
 
+unsigned long *invocations;
+unsigned long *returns;
+std::vector<int> pops;
+
+inline unsigned long rdtsc() {
+  volatile unsigned long tl;
+  asm __volatile__("lfence\nrdtsc" : "=a" (tl): : "%edx"); //lfence is used to wait for prior instruction (optional)
+  return tl;
+}
+
 template<class T>
 void work(int thread_id, int num_ops, int push_ratio, T *s)
 {
@@ -25,17 +35,47 @@ void work(int thread_id, int num_ops, int push_ratio, T *s)
 	{
 		int r = randomDist(randomGen);
 		bool result;
+		int val = -11;
+		int popOpn;
+
+		//Log invocation and return, as well as execute a random method
+		unsigned long invoked = rdtsc();
+		unsigned long returned;
 
 		if ((r % 100) < push_ratio)
 		{
-			result = s->push(thread_id, i, r);
+			result = s->push(thread_id, i, r, val, popOpn);
+
+			returned = rdtsc();
+			if (val != -11)
+			{
+				//Find the pending pop, update its return timestamp
+				std::cout << "Pending pop found\n";
+			}
 		}
 		else
 		{
-			int val;
 			result = s->pop(thread_id, i, val);
+
+			if (val != -11)
+				returned = rdtsc();
 		}
+
+		//Store result of pop
+		if (val != -11)
+		{
+			pops.push_back(val);
+		}
+
+		invocations[i] = invoked;
+		returns[i] = returned;
 	}
+}
+
+//Exports the history of the execution to file based on invocations and returns
+void exportHistory()
+{
+
 }
 
 int main(int argc, char** argv)
@@ -50,6 +90,9 @@ int main(int argc, char** argv)
 	int NUM_OPS = atoi(argv[2]);
 	int RATIO_PUSH = atoi(argv[3]);
 	char* MODE = argv[4];
+
+	invocations = new unsigned long [NUM_OPS];
+	returns = new unsigned long [NUM_OPS];
 
 	std::ofstream file;
 	file.open(std::string(MODE) + std::to_string(RATIO_PUSH) + std::string(".dat"), std::ios_base::app);
@@ -111,6 +154,11 @@ int main(int argc, char** argv)
 	{
 		std::cout << "Argument 4 not recognized, please retry\n";
 		return -1;
+	}
+
+	for (int i = 0; i < NUM_OPS; i++)
+	{
+		//std::cout << "invoked: " << invocations[i] << "\treturned: " << returns[i] << "\tdiff: " << (returns[i]-invocations[i]) << "\n";
 	}
 
 }
