@@ -16,7 +16,6 @@ EliminationBackoffStack<int> *ebs = nullptr;
 
 unsigned long *invocations;
 unsigned long *returns;
-std::vector<int> pops;
 
 inline unsigned long rdtsc() {
   volatile unsigned long tl;
@@ -50,7 +49,7 @@ void work(int thread_id, int num_ops, int push_ratio, T *s)
 			if (val != -11)
 			{
 				//Find the pending pop, update its return timestamp
-				std::cout << "Pending pop found\n";
+				//std::cout << "Pending pop found\n";
 			}
 		}
 		else
@@ -59,12 +58,6 @@ void work(int thread_id, int num_ops, int push_ratio, T *s)
 
 			if (val != -11)
 				returned = rdtsc();
-		}
-
-		//Store result of pop
-		if (val != -11)
-		{
-			pops.push_back(val);
 		}
 
 		invocations[i] = invoked;
