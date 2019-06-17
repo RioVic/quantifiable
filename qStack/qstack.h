@@ -36,6 +36,11 @@ public:
 			threadIndex.push_back(0);
 
 			NodeAlloc[i] = new Node[num_ops];
+			
+			for (int j = 0; j < num_ops; j++)
+			{
+				NodeAlloc[i][j].value( i + (num_threads * j) ); //Give each thread a counting number to insert
+			}
 		}
 
 		Node *s = new Node();
@@ -79,7 +84,7 @@ bool QStack<T>::push(int tid, int opn, T ins, T &v, int &popOpn)
 {
 	//Extract pre-allocated node
 	Node *elem = &NodeAlloc[tid][opn];
-	elem->value(ins);
+	//elem->value(ins); Val already set
 	elem->type(Push);
 	elem->opn(opn);
 
@@ -162,7 +167,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 		else
 		{
 			int pushOpn;
-			
+
 			//Attempt to remove as normal
 			if (!this->remove(tid, opn, v, headIndex, cur, pushOpn))
 			{
@@ -370,7 +375,7 @@ public:
 	Node () : _pred() {};
 
 	T value() { return _val; };
-	void value(T &v) { _val = v; };
+	void value(T v) { _val = v; };
 
 	void next(Node *n) {_next = n; };
 	Node *next() { return _next; };
