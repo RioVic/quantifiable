@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <boost/random.hpp>
 
 #define CAS_LIMIT 1
 #define MAX_FORK_AT_NODE 3
@@ -46,6 +47,9 @@ public:
 		Node *s = new Node();
 		s->sentinel(true);
 		top[0] = s;
+
+		randomGen.seed(time(0));
+		randomDist = boost::uniform_int<uint32_t>(0, num_threads-1);
 	}
 
 	~QStack()
@@ -71,6 +75,8 @@ public:
 	std::vector<int> headIndexStats = {0,0,0,0,0,0,0,0};
 	std::vector<int> threadIndex;
 	int branches = 1;
+	boost::uniform_int<uint32_t> randomDist;
+	boost::mt19937 randomGen;
 
 private:
 	std::atomic<Node *> *top; // node pointer array for branches
@@ -143,7 +149,8 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 	while (true)
 	{
 		//Get preferred index
-		int headIndex = threadIndex[tid];
+		//int headIndex = threadIndex[tid];
+		int headIndex = randomDist(randomGen); //Choose pop index randomly
 
 		//Read top of stack
 		Node *cur = top[headIndex].load();
