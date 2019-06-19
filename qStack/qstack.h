@@ -15,7 +15,10 @@
 #define CLR_MARK(_p)    ((Node *)(((uintptr_t)(_p)) & ~1))
 #define IS_MARKED(_p)     (((uintptr_t)(_p)) & 1)
 
+#ifndef OP_D
+#define OP_D
 enum Operation { Push, Pop, Fork };
+#endif
 
 template<typename T>
 class QStack
