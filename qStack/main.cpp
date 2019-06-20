@@ -105,7 +105,7 @@ void exportHistory(int num_ops, int num_threads, T *s)
 	f1 << "thread\tinvocation\treturn\n";
 	for (int i = 0; i < num_threads; i++)
 	{
-		for (int j = 0; j < num_ops; j++)
+		for (int j = 0; j < num_ops/num_threads; j++)
 		{
 			f1 << i << "\t" << invocations[i][j] << "\t" << returns[i][j] << "\n";
 		}
@@ -130,8 +130,8 @@ int main(int argc, char** argv)
 
 	for (int k = 0; k < NUM_THREADS; k++)
 	{
-		invocations[k] = new unsigned long [NUM_OPS];
-		returns[k] = new unsigned long [NUM_OPS];
+		invocations[k] = new unsigned long [NUM_OPS/NUM_THREADS];
+		returns[k] = new unsigned long [NUM_OPS/NUM_THREADS];
 	}
 
 	std::ofstream file;
