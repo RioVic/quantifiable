@@ -73,6 +73,11 @@ class Treiber_S {
             return true;
         }
 
+        bool isEmpty()
+        {
+            return head.load() == NULL;
+        }
+
         int getNumOps() {
             return numOps;
         }

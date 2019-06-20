@@ -82,14 +82,11 @@ template<class T>
 void exportHistory(int num_ops, int num_threads, T *s)
 {
 	int val;
-	while (true)
+	int op = num_ops/num_threads;
+	while (!s->isEmpty())
 	{
 		val = -11;
-		s->pop(0, 0, val);
-
-		//Stack empty
-		if (val == -11)
-			break;
+		s->pop(0, op++, val);
 
 		pops.push_back(val);
 	}

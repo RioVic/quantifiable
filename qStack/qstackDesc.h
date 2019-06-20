@@ -35,10 +35,10 @@ public:
 			top[i] = nullptr;
 			threadIndex.push_back(0);
 
-			NodeAlloc[i] = new Node[num_ops];
-			DescAlloc[i] = new Desc[num_ops];
+			NodeAlloc[i] = new Node[num_ops*num_threads*2];
+			DescAlloc[i] = new Desc[num_ops*num_threads*2];
 
-			for (int j = 0; j < num_ops; j++)
+			for (int j = 0; j < num_ops*num_threads*2; j++)
 			{
 				NodeAlloc[i][j].value( i + (num_threads * j) ); //Give each thread a counting number to insert
 			}
@@ -70,6 +70,8 @@ public:
 	bool remove(int tid, int opn, T &v, int index, Node *cur, int &popOpn);
 
 	void dumpNodes(std::ofstream &p);
+
+	bool isEmpty();
 
 	std::vector<int> headIndexStats = {0,0,0,0,0,0,0,0};
 	std::vector<int> threadIndex;
@@ -114,11 +116,14 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn)
 		elem->next(cur);
 		
 		//If no operation is occuring at current node
-		if (cur_desc == nullptr || cur_desc->active == false)
+		if ((cur_desc == nullptr || cur_desc->active == false) && top[headIndex] == cur)
 		{
 			//Place our descriptor in the node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
+				if (top[headIndex] != cur)
+					std::cout << "Bad bad\n";
+
 				if (cur->isSentinel() || cur->type() == Push)
 				{
 					//Add node as usual
@@ -238,6 +243,8 @@ template<typename T>
 bool QStackDesc<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 {
 	//Update head (can be done without CAS since we own the current head of this branch via descriptor)
+	if (top[headIndex] != cur)
+		std::cout << "Bad bad\n";
 	top[headIndex] = elem;
 	elem->level(headIndex);
 
@@ -286,12 +293,24 @@ bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int
 		//If there is a pred pointer, we cannot pop this node. We must go somewhere else
 		if (top[headIndex] == cur)
 		{
-			std::cout << this->branches << "\n";
 			this->branches--;
 			top[headIndex] = nullptr;
 		}
 		return false;
 	}	
+}
+
+template<typename T>
+bool QStackDesc<T>::isEmpty()
+{
+	for (int i = 0; i < num_threads; i++)
+	{
+		Node *n = top[i].load();
+		if (n != NULL && n->isSentinel())
+			return true;
+	}
+
+	return false;
 }
 
 template<typename T>

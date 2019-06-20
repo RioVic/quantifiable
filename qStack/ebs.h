@@ -195,6 +195,11 @@ public:
 		}
 	}
 
+	bool isEmpty()
+    {
+        return head.load() == NULL;
+    }
+
 	int getSize() 
 	{
 		++numSize;

@@ -71,6 +71,8 @@ public:
 
 	void dumpNodes(std::ofstream &p);
 
+	bool isEmpty();
+
 	std::vector<int> headIndexStats = {0,0,0,0,0,0,0,0};
 	std::vector<int> threadIndex;
 	int branches = 1;
@@ -343,6 +345,19 @@ bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int &po
 	}
 
 	return true;
+}
+
+template<typename T>
+bool QStack<T>::isEmpty()
+{
+	for (int i = 0; i < num_threads; i++)
+	{
+		Node *n = top[i].load();
+		if (n != NULL && n->isSentinel())
+			return true;
+	}
+
+	return false;
 }
 
 template<typename T>
