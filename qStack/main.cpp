@@ -91,24 +91,16 @@ void exportHistory(int num_ops, int num_threads, T *s)
 		pops.push_back(val);
 	}
 
-	std::ofstream f1;
-	f1.open(std::string("history.dat"), std::ios_base::app);
-
 	std::ofstream f2;
 	f2.open(std::string("popOrder.dat"), std::ios_base::app);
 
+	f2 << "thread\tvalue\tinvocation\treturn\n";
 	for (auto &n : pops)
 	{
-		f2 << n << "\n";
-	}
-
-	f1 << "thread\tinvocation\treturn\n";
-	for (int i = 0; i < num_threads; i++)
-	{
-		for (int j = 0; j < num_ops/num_threads; j++)
-		{
-			f1 << i << "\t" << invocations[i][j] << "\t" << returns[i][j] << "\n";
-		}
+		int thread = n%num_threads;
+		int opn = n/num_threads;
+		
+		f2 << thread << "\t" << n << "\t" << invocations[thread][opn] << "\t" << returns[thread][opn] << "\n";
 	}
 }
 
