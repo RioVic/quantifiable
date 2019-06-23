@@ -18,7 +18,8 @@ EliminationBackoffStack<int> *ebs = nullptr;
 
 unsigned long **invocations;
 unsigned long **returns;
-std::vector<int> pops;
+unsigned long **pops;
+unsigned long **pushes;
 
 inline unsigned long rdtsc() {
   volatile unsigned long tl;
@@ -33,33 +34,40 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 	randomGen.seed(time(0));
 	boost::uniform_int<uint32_t> randomDist(1, 1000);
 
+	unsigned long invoked;
+	unsigned long returned;
+	int insert = thread_id + 1;
+	int popOpn;
+	int popThread;
+	int val;
+	bool result;
+	int r;
+
 	for (int i = 0; i < num_ops; i++)
 	{
-		int r = randomDist(randomGen);
-		bool result;
-		int val = -11;
-		int popOpn;
+		r = randomDist(randomGen);
+		val = -11;
 
 		//Log invocation and return, as well as execute a random method
-		unsigned long invoked = rdtsc();
-		unsigned long returned;
+		invoked = rdtsc();
 
 		if ((r % 100) < push_ratio)
 		{
-			result = s->push(thread_id, i, r, val, popOpn);
+			result = s->push(thread_id, i, insert, val, popOpn, popThread);
 
 			returned = rdtsc();
 			if (val != -11)
 			{
 				//This push matched with a pending pop
 				//Find the pending pop, update its return timestamp
-				std::cout << "Pending pop found\n";
-				int thread = val%num_threads;
-				returns[thread][popOpn];
+				//std::cout << "Pending pop found\n" << popOpn << "\t" << popThread << "\t" << insert << "\n";
+				returns[popThread][popOpn] = returned;
+				pops[popThread][popOpn] = insert;
 			}
 
-			//Normal case
 			returns[thread_id][i] = returned;
+			pushes[thread_id][i] = insert;
+			insert += num_threads;
 		}
 		else
 		{
@@ -68,11 +76,36 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 
 			//Normal case
 			if (val != -11)
+			{
 				returns[thread_id][i] = returned;
-				
+				pops[thread_id][i] = val;
+			}
+
+			//If we don't get a value back here, it means the pop is pending, and that we must get the return time when a push() operation satisfies it	
 		}
 
 		invocations[thread_id][i] = invoked;
+	}
+
+	//Pop until empty
+	//Continue the op counter where the benchmark left off: (total ops/num_thread) == num_ops
+	int op = num_ops;
+	while (!s->isEmpty())
+	{
+		int val = -11;
+
+		invoked = rdtsc();
+		s->pop(thread_id, op, val);
+		returned = rdtsc();
+
+		//Sucessful pop
+		if (val != -11)
+		{
+			pops[thread_id][op] = val;
+			invocations[thread_id][op] = invoked;
+			returns[thread_id][op] = returned;
+			op++;
+		}
 	}
 }
 
@@ -81,26 +114,23 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 template<class T>
 void exportHistory(int num_ops, int num_threads, T *s)
 {
-	int val;
-	int op = num_ops/num_threads;
-	while (!s->isEmpty())
-	{
-		val = -11;
-		s->pop(0, op++, val);
-
-		pops.push_back(val);
-	}
-
 	std::ofstream f2;
 	f2.open(std::string("popOrder.dat"), std::ios_base::app);
 
-	f2 << "thread\tvalue\tinvocation\treturn\n";
-	for (auto &n : pops)
+	f2 << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\n";
+	for (int i = 0; i < num_ops*2; i++)
 	{
-		int thread = n%num_threads;
-		int opn = n/num_threads;
-		
-		f2 << thread << "\t" << n << "\t" << invocations[thread][opn] << "\t" << returns[thread][opn] << "\n";
+		for (int k = 0; k < num_threads; k++)
+		{
+			if (pops[k][i] == -22 && pushes[k][i] == -22)
+				continue;
+
+			unsigned long invoked = invocations[k][i];
+			unsigned long returned = returns[k][i];
+			int val = (pops[k][i] == -22) ? pushes[k][i] : pops[k][i];
+
+			f2 << "Intel\t" << "QStack\t" << (pops[k][i] == -22 ? "Push\t" : "Pop\t") << k << "\t" << "x" << "\t" << val << "\t" << invoked << "\t" << returned << "\n";
+		}
 	}
 }
 
@@ -119,11 +149,21 @@ int main(int argc, char** argv)
 
 	invocations = new unsigned long *[NUM_THREADS];
 	returns = new unsigned long *[NUM_THREADS];
+	pops = new unsigned long *[NUM_THREADS];
+	pushes = new unsigned long *[NUM_THREADS];
 
 	for (int k = 0; k < NUM_THREADS; k++)
 	{
-		invocations[k] = new unsigned long [NUM_OPS/NUM_THREADS];
-		returns[k] = new unsigned long [NUM_OPS/NUM_THREADS];
+		invocations[k] = new unsigned long [NUM_OPS*2];
+		returns[k] = new unsigned long [NUM_OPS*2];
+		pops[k] = new unsigned long [NUM_OPS*2];
+		pushes[k] = new unsigned long [NUM_OPS*2];
+
+		for (int j = 0; j < NUM_OPS*2; j++)
+		{
+			pops[k][j] = -22;
+			pushes[k][j] = -22;
+		}
 	}
 
 	std::ofstream file;

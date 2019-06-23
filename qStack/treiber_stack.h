@@ -57,7 +57,7 @@ class Treiber_S {
             delete[] nodeArray;
         }
 
-        bool push(int tid, int i, T item, T &v, int &popOpn) {
+        bool push(int tid, int i, T item, T &v, int &popOpn, int &popThread) {
             Node *n = &nodeArray[tid][i];
             //n->val = item; 
             do {
