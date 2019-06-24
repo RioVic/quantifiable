@@ -215,6 +215,8 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 					if (top[headIndex] != cur)
 					{
 						cur->desc = nullptr;
+						if (next != nullptr)
+							next->desc = nullptr;
 						continue;
 					}
 
@@ -245,6 +247,8 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 						if (!this->remove(tid, opn, v, headIndex, cur, pushOpn, popThread))
 						{
 							cur->desc = nullptr;
+							if (next != nullptr)
+								next->desc = nullptr;
 							threadIndex[tid] = (headIndex + 1) % this->num_threads;
 						}
 						else
@@ -291,7 +295,7 @@ bool QStackDesc<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *e
 	int req = forkRequest.load();
 
 	//Try to satisfy the fork request if it exists
-	if (req && forkRequest.compare_exchange_weak(req, 0))
+	if (cur->predNotFull(top, num_threads) && req && forkRequest.compare_exchange_weak(req, 0))
 	{
 		//Point an available head pointer at curr
 		for (int i = 0; i < num_threads; i++)
@@ -407,6 +411,27 @@ public:
 	void thread(int tid) { _thread = tid; };
 	int thread() { return _thread; };
 
+	bool predNotFull(std::atomic<Node *> *top, int num_threads)
+	{
+		int pointerCount = 0;
+		for (int i = 0; i < num_threads; i++)
+		{
+			Node *n = top[i];
+			if (n == this)
+				pointerCount++;
+		}
+
+		for (auto &n : _pred)
+		{
+			if (n == nullptr && pointerCount-- == 0)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	void addPred(Node *p) 
 	{ 
 		for (auto &n : _pred)
@@ -434,10 +459,12 @@ public:
 			return true;
 		}
 
+		Node *copy[2];
 		Node **preds = _next->pred();
 		for (int i = 0; i < 2; i++)
 		{
 			Node *n = preds[i];
+			copy[i] = n;
 			if (n == this)
 			{
 				return true;

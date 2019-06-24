@@ -34,8 +34,8 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 	randomGen.seed(time(0));
 	boost::uniform_int<uint32_t> randomDist(1, 1000);
 
-	unsigned long invoked;
-	unsigned long returned;
+	long long invoked;
+	long long returned;
 	int insert = thread_id + 1;
 	int popOpn;
 	int popThread;
@@ -51,7 +51,7 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 		//Log invocation and return, as well as execute a random method
 		invoked = rdtsc();
 
-		if ((r % 100) < push_ratio)
+		if ((i % 2000) < 1000)
 		{
 			result = s->push(thread_id, i, insert, val, popOpn, popThread);
 
@@ -129,7 +129,7 @@ void exportHistory(int num_ops, int num_threads, T *s)
 			unsigned long returned = returns[k][i];
 			int val = (pops[k][i] == -22) ? pushes[k][i] : pops[k][i];
 
-			f2 << "Intel\t" << "QStack\t" << (pops[k][i] == -22 ? "Push\t" : "Pop\t") << k << "\t" << "x" << "\t" << val << "\t" << invoked << "\t" << returned << "\n";
+			f2 << "AMD\t" << "QStack\t" << (pops[k][i] == -22 ? "Push\t" : "Pop\t") << k << "\t" << "x" << "\t" << val << "\t" << invoked << "\t" << returned << "\n";
 		}
 	}
 }
