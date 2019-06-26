@@ -16,13 +16,13 @@ QStack<int> *q = nullptr;
 Treiber_S<int> *treiber = nullptr;
 EliminationBackoffStack<int> *ebs = nullptr;
 
-unsigned long **invocations;
-unsigned long **returns;
-unsigned long **pops;
-unsigned long **pushes;
+long long **invocations;
+long long **returns;
+int **pops;
+int **pushes;
 
-inline unsigned long rdtsc() {
-  volatile unsigned long tl;
+inline long long rdtsc() {
+  volatile long long tl;
   asm __volatile__("lfence\nrdtsc" : "=a" (tl): : "%edx"); //lfence is used to wait for prior instruction (optional)
   return tl;
 }
@@ -125,8 +125,8 @@ void exportHistory(int num_ops, int num_threads, T *s)
 			if (pops[k][i] == -22 && pushes[k][i] == -22)
 				continue;
 
-			unsigned long invoked = invocations[k][i];
-			unsigned long returned = returns[k][i];
+			long long invoked = invocations[k][i];
+			long long returned = returns[k][i];
 			int val = (pops[k][i] == -22) ? pushes[k][i] : pops[k][i];
 
 			f2 << "AMD\t" << "QStack\t" << (pops[k][i] == -22 ? "Push\t" : "Pop\t") << k << "\t" << "x" << "\t" << val << "\t" << invoked << "\t" << returned << "\n";
@@ -147,17 +147,17 @@ int main(int argc, char** argv)
 	int RATIO_PUSH = atoi(argv[3]);
 	char* MODE = argv[4];
 
-	invocations = new unsigned long *[NUM_THREADS];
-	returns = new unsigned long *[NUM_THREADS];
-	pops = new unsigned long *[NUM_THREADS];
-	pushes = new unsigned long *[NUM_THREADS];
+	invocations = new long long *[NUM_THREADS];
+	returns = new long long *[NUM_THREADS];
+	pops = new int *[NUM_THREADS];
+	pushes = new int *[NUM_THREADS];
 
 	for (int k = 0; k < NUM_THREADS; k++)
 	{
-		invocations[k] = new unsigned long [NUM_OPS*2];
-		returns[k] = new unsigned long [NUM_OPS*2];
-		pops[k] = new unsigned long [NUM_OPS*2];
-		pushes[k] = new unsigned long [NUM_OPS*2];
+		invocations[k] = new long long [NUM_OPS*2];
+		returns[k] = new long long [NUM_OPS*2];
+		pops[k] = new int [NUM_OPS*2];
+		pushes[k] = new int [NUM_OPS*2];
 
 		for (int j = 0; j < NUM_OPS*2; j++)
 		{
