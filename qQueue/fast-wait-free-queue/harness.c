@@ -6,12 +6,13 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <string.h>
 #include "bits.h"
 #include "cpumap.h"
 #include "benchmark.h"
 
 #ifndef NUM_ITERS
-#define NUM_ITERS 5
+#define NUM_ITERS 1
 #endif
 
 #ifndef MAX_PROCS
@@ -19,7 +20,7 @@
 #endif
 
 #ifndef MAX_ITERS
-#define MAX_ITERS 20
+#define MAX_ITERS 1
 #endif
 
 #ifndef COV_THRESHOLD
