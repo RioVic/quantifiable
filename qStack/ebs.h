@@ -134,11 +134,6 @@ public:
         for (int i = 0; i < num_threads; i++)
         {
             nodeAlloc[i] = new Node[num_ops];
-
-            for (int j = 0; j < num_ops; j++)
-			{
-				nodeAlloc[i][j].val = ( i + (num_threads * j) ); //Give each thread a counting number to insert
-			}
         }
 	}
 
@@ -151,10 +146,10 @@ public:
         delete[] nodeAlloc;
     }
 
-	bool push(int tid, int i, T x, T &v, int &popOpn, int &popThread) 
+	bool push(int tid, int i, T x, T &v, int &popOpn, int &popThread, long long timestamp) 
 	{
 		Node *n = &nodeAlloc[tid][i];
-		//n->val = x;
+		n->val = x;
 
 		for (;;) {
 			n->next = head.load();
@@ -202,7 +197,7 @@ public:
 
 	bool isEmpty()
     {
-        return head.load() == NULL;
+        return head.load()->next == NULL;
     }
 
 	int getSize() 
