@@ -21,6 +21,8 @@ long long **returns;
 int **pops;
 int **pushes;
 
+std::atomic<bool> cutoff;
+
 pthread_barrier_t our_barrier;
 
 inline long long rdtsc() {
@@ -47,6 +49,11 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 
 	for (int i = 0; i < num_ops; i++)
 	{
+		if (cutoff == true)
+		{
+			break;
+		}
+
 		r = randomDist(randomGen);
 		val = -11;
 
@@ -88,6 +95,8 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 
 		invocations[thread_id][i] = invoked;
 	}
+
+	cutoff = true;
 }
 
 //Exports the history of the execution to file based on invocations and returns
@@ -150,6 +159,7 @@ int main(int argc, char** argv)
 	int NUM_OPS = atoi(argv[2]);
 	int RATIO_PUSH = atoi(argv[3]);
 	char* MODE = argv[4];
+	cutoff = false;
 
 	invocations = new long long *[NUM_THREADS];
 	returns = new long long *[NUM_THREADS];

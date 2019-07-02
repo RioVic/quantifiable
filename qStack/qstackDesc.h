@@ -189,10 +189,10 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 	while (true)
 	{
 		//Random pop
-		//int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
+		int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
 
 		//Thread prefered pop
-		int headIndex = threadIndex[tid];
+		//int headIndex = threadIndex[tid];
 
 		/* Timestamp based pop
 		long long highest = 0;
