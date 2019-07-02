@@ -72,7 +72,6 @@ public:
 
 	bool isEmpty();
 
-	std::vector<int> headIndexStats = {0,0,0,0,0,0,0,0};
 	std::vector<int> threadIndex;
 	int branches = 1;
 	boost::uniform_int<uint32_t> *randomDist;
@@ -101,7 +100,10 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 
 	while (true)
 	{
-		int headIndex = threadIndex[tid];
+		int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
+
+		//Thread preferred push
+		//int headIndex = threadIndex[tid];
 
 		//Read top of stack
 		Node *cur = top[headIndex].load();
@@ -297,9 +299,11 @@ template<typename T>
 bool QStackDesc<T>::add(int tid, int opn, int headIndex, Node *cur, Node *elem)
 {
 	//Since this node is at the head, we know it has room for at least 1 more predecessor, so we add our current element
-	//We must add cur to the pred first, as the next line will make elem visible to other threads. This create a window where 
-	//cur is in the list but it is not linked to elem
+	//We must add cur to the pred list before updating top, otherwise this node will be visible without being fully linked
 	cur->addPred(elem);
+
+	//Update the depth field for this node to help with balancing the tree
+	cur->depth = cur->next()->depth + 1;
 
 	//Update head (can be done without CAS since we own the current head of this branch via descriptor)
 	top[headIndex] = elem;
@@ -528,6 +532,7 @@ public:
 	//std::atomic<QStackDesc::Desc> desc() { return _desc; };
 
 	std::atomic<QStackDesc::Desc *> desc;
+	int depth = 0;
 
 private:
 	T _val {NULL};
