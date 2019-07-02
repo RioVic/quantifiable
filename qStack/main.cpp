@@ -21,6 +21,8 @@ long long **returns;
 int **pops;
 int **pushes;
 
+pthread_barrier_t our_barrier;
+
 inline long long rdtsc() {
   volatile long long tl;
   asm __volatile__("lfence\nrdtsc" : "=a" (tl): : "%edx"); //lfence is used to wait for prior instruction (optional)
@@ -51,9 +53,9 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 		//Log invocation and return, as well as execute a random method
 		invoked = rdtsc();
 
-		if ((i % 2000) < 1000)
+		if ((r % 100) < push_ratio)
 		{
-			result = s->push(thread_id, i, insert, val, popOpn, popThread);
+			result = s->push(thread_id, i, insert, val, popOpn, popThread, invoked);
 
 			returned = rdtsc();
 			if (val != -11)
@@ -86,27 +88,6 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 
 		invocations[thread_id][i] = invoked;
 	}
-
-	//Pop until empty
-	//Continue the op counter where the benchmark left off: (total ops/num_thread) == num_ops
-	int op = num_ops;
-	while (!s->isEmpty())
-	{
-		int val = -11;
-
-		invoked = rdtsc();
-		s->pop(thread_id, op, val);
-		returned = rdtsc();
-
-		//Sucessful pop
-		if (val != -11)
-		{
-			pops[thread_id][op] = val;
-			invocations[thread_id][op] = invoked;
-			returns[thread_id][op] = returned;
-			op++;
-		}
-	}
 }
 
 //Exports the history of the execution to file based on invocations and returns
@@ -115,7 +96,30 @@ template<class T>
 void exportHistory(int num_ops, int num_threads, T *s)
 {
 	std::ofstream f2;
-	f2.open(std::string("popOrder.dat"), std::ios_base::app);
+	f2.open(std::string("AMD_") + std::string("Qstack_") + std::to_string(num_threads) + std::string("t_100.dat"), std::ios_base::app);
+
+	//Pop until empty
+	//Continue the op counter where the benchmark left off: (total ops/num_thread) == num_ops
+	int op = num_ops/num_threads;
+	long long invoked;
+	long long returned;
+	while (!s->isEmpty())
+	{
+		int val = -11;
+
+		invoked = rdtsc();
+		s->pop(0, op, val);
+		returned = rdtsc();
+
+		//Sucessful pop
+		if (val != -11)
+		{
+			pops[0][op] = val;
+			invocations[0][op] = invoked;
+			returns[0][op] = returned;
+			op++;
+		}
+	}
 
 	f2 << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\n";
 	for (int i = 0; i < num_ops*2; i++)
@@ -165,6 +169,8 @@ int main(int argc, char** argv)
 			pushes[k][j] = -22;
 		}
 	}
+
+	pthread_barrier_init(&our_barrier,NULL,NUM_THREADS);
 
 	std::ofstream file;
 	file.open(std::string(MODE) + std::to_string(RATIO_PUSH) + std::string(".dat"), std::ios_base::app);

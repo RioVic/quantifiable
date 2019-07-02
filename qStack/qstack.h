@@ -8,8 +8,8 @@
 #include <iomanip>
 #include <boost/random.hpp>
 
-#define CAS_LIMIT 3
-#define MAX_FORK_AT_NODE 2
+#define CAS_LIMIT 1
+#define MAX_FORK_AT_NODE 4
 
 //Must use CAS to save the marked value back into variable
 #define SET_MARK(_p)    ((Node *)(((uintptr_t)(_p)) | 1))
@@ -65,7 +65,7 @@ public:
 		delete[] NodeAlloc;
 	}
 
-	bool push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread);
+	bool push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread, long long timestamp);
 
 	bool pop(int tid, int opn, T &v);
 
@@ -91,7 +91,7 @@ private:
 };
 
 template<typename T>
-bool QStack<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread)
+bool QStack<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread, long long timestamp)
 {
 	//Extract pre-allocated node
 	Node *elem = &NodeAlloc[tid][opn];

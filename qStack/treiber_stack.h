@@ -40,11 +40,6 @@ class Treiber_S {
             for (int i = 0; i < num_threads; i++)
             {
                 nodeArray[i] = new Node[num_ops];
-
-                for (int j = 0; j < num_ops; j++)
-                {
-                    nodeArray[i][j].val = (i + (num_threads * j)); //Give each thread a counting number to insert
-                }
             }
         }
 
@@ -57,9 +52,9 @@ class Treiber_S {
             delete[] nodeArray;
         }
 
-        bool push(int tid, int i, T item, T &v, int &popOpn, int &popThread) {
+        bool push(int tid, int i, T item, T &v, int &popOpn, int &popThread, long long timestamp) {
             Node *n = &nodeArray[tid][i];
-            //n->val = item; 
+            n->val = item; 
             do {
                 n->next = head.load();
             } while (!head.compare_exchange_weak(n->next, n));        
@@ -80,7 +75,7 @@ class Treiber_S {
 
         bool isEmpty()
         {
-            return head.load() == NULL;
+            return head.load()->next == NULL;
         }
 
         int getNumOps() {
