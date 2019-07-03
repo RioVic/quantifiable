@@ -9,7 +9,7 @@
 #include <boost/random.hpp>
 
 #define CAS_LIMIT 1
-#define MAX_FORK_AT_NODE 4
+#define MAX_FORK_AT_NODE 3
 
 //Must use CAS to save the marked value back into variable
 #define SET_MARK(_p)    ((Node *)(((uintptr_t)(_p)) | 1))
