@@ -32,71 +32,33 @@ inline long long rdtsc() {
 }
 
 template<class T>
-void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
+void work(int thread_id, int num_ops, int push_ratio, T *s)
 {
 	boost::mt19937 randomGen;
 	randomGen.seed(time(0));
 	boost::uniform_int<uint32_t> randomDist(1, 1000);
 
-	long long invoked;
-	long long returned;
-	int insert = thread_id + 1;
-	int popOpn;
-	int popThread;
-	int val;
-	bool result;
-	int r;
+	int popOpn = 0;
+	int popThread = 0;
+	long long invoked = 0;
+	int val = -11;
 
 	for (int i = 0; i < num_ops; i++)
 	{
-		if (cutoff == true)
-		{
-			break;
-		}
-
-		r = randomDist(randomGen);
-		val = -11;
-
-		//Log invocation and return, as well as execute a random method
+		int r = randomDist(randomGen);
+		bool result;
 		invoked = rdtsc();
 
 		if ((r % 100) < push_ratio)
 		{
-			result = s->push(thread_id, i, insert, val, popOpn, popThread, invoked);
-
-			returned = rdtsc();
-			if (val != -11)
-			{
-				//This push matched with a pending pop
-				//Find the pending pop, update its return timestamp
-				//std::cout << "Pending pop found\n" << popOpn << "\t" << popThread << "\t" << insert << "\n";
-				returns[popThread][popOpn] = returned;
-				pops[popThread][popOpn] = insert;
-			}
-
-			returns[thread_id][i] = returned;
-			pushes[thread_id][i] = insert;
-			insert += num_threads;
+			result = s->push(thread_id, i, r, val, popOpn, popThread, invoked);
 		}
 		else
 		{
+			int val;
 			result = s->pop(thread_id, i, val);
-			returned = rdtsc();
-
-			//Normal case
-			if (val != -11)
-			{
-				returns[thread_id][i] = returned;
-				pops[thread_id][i] = val;
-			}
-
-			//If we don't get a value back here, it means the pop is pending, and that we must get the return time when a push() operation satisfies it	
 		}
-
-		invocations[thread_id][i] = invoked;
 	}
-
-	cutoff = true;
 }
 
 //Exports the history of the execution to file based on invocations and returns
@@ -161,25 +123,6 @@ int main(int argc, char** argv)
 	char* MODE = argv[4];
 	cutoff = false;
 
-	invocations = new long long *[NUM_THREADS];
-	returns = new long long *[NUM_THREADS];
-	pops = new int *[NUM_THREADS];
-	pushes = new int *[NUM_THREADS];
-
-	for (int k = 0; k < NUM_THREADS; k++)
-	{
-		invocations[k] = new long long [NUM_OPS*2];
-		returns[k] = new long long [NUM_OPS*2];
-		pops[k] = new int [NUM_OPS*2];
-		pushes[k] = new int [NUM_OPS*2];
-
-		for (int j = 0; j < NUM_OPS*2; j++)
-		{
-			pops[k][j] = -22;
-			pushes[k][j] = -22;
-		}
-	}
-
 	pthread_barrier_init(&our_barrier,NULL,NUM_THREADS);
 
 	std::ofstream file;
@@ -192,7 +135,7 @@ int main(int argc, char** argv)
 		auto start = std::chrono::high_resolution_clock::now();
 
 		for (int j = 0; j < NUM_THREADS; j++)
-			threads.push_back(std::thread(&work<QStack<int>>, j, NUM_OPS/NUM_THREADS, RATIO_PUSH, s, NUM_THREADS));
+			threads.push_back(std::thread(&work<QStack<int>>, j, NUM_OPS/NUM_THREADS, RATIO_PUSH, s));
 
 		for (std::thread &t : threads)
 			t.join();
@@ -202,7 +145,7 @@ int main(int argc, char** argv)
 		//s->dumpNodes(file);
 
 		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
-		exportHistory(NUM_OPS, NUM_THREADS, s);
+		//exportHistory(NUM_OPS, NUM_THREADS, s);
 		delete s;
 	}
 	else if (strcmp(MODE, "Treiber") == 0)
@@ -211,7 +154,7 @@ int main(int argc, char** argv)
 		auto start = std::chrono::high_resolution_clock::now();
 
 		for (int j = 0; j < NUM_THREADS; j++)
-			threads.push_back(std::thread(&work<Treiber_S<int>>, j, NUM_OPS/NUM_THREADS, RATIO_PUSH, s, NUM_THREADS));
+			threads.push_back(std::thread(&work<Treiber_S<int>>, j, NUM_OPS/NUM_THREADS, RATIO_PUSH, s));
 
 		for (std::thread &t : threads)
 			t.join();
@@ -220,7 +163,7 @@ int main(int argc, char** argv)
 		auto elapsed = end-start;
 
 		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
-		exportHistory(NUM_OPS, NUM_THREADS, s);
+		//exportHistory(NUM_OPS, NUM_THREADS, s);
 		delete s;
 	}
 	else if (strcmp(MODE, "EBS") == 0)
@@ -229,7 +172,7 @@ int main(int argc, char** argv)
 		auto start = std::chrono::high_resolution_clock::now();
 
 		for (int j = 0; j < NUM_THREADS; j++)
-			threads.push_back(std::thread(&work<EliminationBackoffStack<int>>, j, NUM_OPS/NUM_THREADS, RATIO_PUSH, s, NUM_THREADS));
+			threads.push_back(std::thread(&work<EliminationBackoffStack<int>>, j, NUM_OPS/NUM_THREADS, RATIO_PUSH, s));
 
 		for (std::thread &t : threads)
 			t.join();
@@ -238,7 +181,7 @@ int main(int argc, char** argv)
 		auto elapsed = end-start;
 
 		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
-		exportHistory(NUM_OPS, NUM_THREADS, s);
+		//exportHistory(NUM_OPS, NUM_THREADS, s);
 		delete s;
 	}
 	else if (strcmp(MODE, "QStackDesc") == 0)
@@ -247,17 +190,16 @@ int main(int argc, char** argv)
 		auto start = std::chrono::high_resolution_clock::now();
 
 		for (int j = 0; j < NUM_THREADS; j++)
-			threads.push_back(std::thread(&work<QStackDesc<int>>, j, NUM_OPS/NUM_THREADS, RATIO_PUSH, s, NUM_THREADS));
+			threads.push_back(std::thread(&work<QStackDesc<int>>, j, NUM_OPS/NUM_THREADS, RATIO_PUSH, s));
 
 		for (std::thread &t : threads)
 			t.join();
 
 		auto end = std::chrono::high_resolution_clock::now();
 		auto elapsed = end-start;
-		//s->dumpNodes(file);
 
 		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
-		exportHistory(NUM_OPS, NUM_THREADS, s);
+		//exportHistory(NUM_OPS, NUM_THREADS, s);
 		delete s;
 	}
 	else

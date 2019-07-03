@@ -8,7 +8,7 @@
 #include <iomanip>
 
 #define CAS_LIMIT 1
-#define MAX_FORK_AT_NODE 4
+#define MAX_FORK_AT_NODE 3
 
 #ifndef OP_D
 #define OP_D
@@ -100,10 +100,10 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 
 	while (true)
 	{
-		int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
+		//int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
 
 		//Thread preferred push
-		//int headIndex = threadIndex[tid];
+		int headIndex = threadIndex[tid];
 
 		//Read top of stack
 		Node *cur = top[headIndex].load();
@@ -137,12 +137,6 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 				{
 					//Add node as usual
 					this->add(tid, opn, headIndex, cur, elem);
-
-					if (cur->next() != nullptr && cur->next()->value() % num_threads == cur->value() % num_threads)
-					{
-						if (cur->next()->timestamp() > cur->timestamp())
-							std::cout << "Error\n";
-					}
 
 					d->active = false;
 					return true;
@@ -191,12 +185,15 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 	while (true)
 	{
 		//Random pop
-		int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
+		//int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
+		//End of random pop
 
 		//Thread prefered pop
-		//int headIndex = threadIndex[tid];
+		int headIndex = threadIndex[tid];
+		//End of thread preferred pop
 
-		/* Timestamp based pop
+		//Timestamp based pop
+		/*
 		long long highest = 0;
 		int headIndex = -1;
 		for (int i = 0; i < num_threads; i++)
@@ -219,6 +216,8 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 			std::cout << "Error\n";
 		}
 		*/
+		//End of timestamp based pop
+		
 		Node *cur = top[headIndex].load();
 		//d->active = true;
 
@@ -303,7 +302,7 @@ bool QStackDesc<T>::add(int tid, int opn, int headIndex, Node *cur, Node *elem)
 	cur->addPred(elem);
 
 	//Update the depth field for this node to help with balancing the tree
-	cur->depth = cur->next()->depth + 1;
+	elem->depth = elem->next()->depth + 1;
 
 	//Update head (can be done without CAS since we own the current head of this branch via descriptor)
 	top[headIndex] = elem;
@@ -544,7 +543,7 @@ private:
 	Operation _type;
 	int _opn;
 	int _thread;
-	long long _timestamp = -22;
+	long long _timestamp = 1;
 	
 };
 
