@@ -1,5 +1,6 @@
 #include <atomic>
 #include <cstdio>
+#include <stdlib.h>
 #include <ctime>
 #include <math.h>
 #include <vector>
@@ -9,6 +10,7 @@
 
 #define CAS_LIMIT 1
 #define MAX_FORK_AT_NODE 3
+#define MAX_DEPTH_DISPARITY 5
 
 #ifndef OP_D
 #define OP_D
@@ -27,6 +29,7 @@ public:
 		forkRequest(0)
 	{
 		top = new std::atomic<Node*>[num_threads];
+		topDepths = new std::atomic<int>[num_threads];
 		NodeAlloc = new Node*[num_threads];
 		DescAlloc = new Desc*[num_threads];
 		randomGen = new boost::mt19937[num_threads];
@@ -35,6 +38,7 @@ public:
 		for (int i = 0; i < num_threads; i++)
 		{
 			top[i] = nullptr;
+			topDepths[i] = -1;
 			threadIndex.push_back(0);
 
 			NodeAlloc[i] = new Node[num_ops*num_threads*2];
@@ -43,6 +47,7 @@ public:
 			randomDist[i] = boost::uniform_int<uint32_t>(0, num_threads-1);
 		}
 
+		topDepths[0] = 0;
 		Node *s = new Node();
 		s->sentinel(true);
 		top[0] = s;
@@ -79,6 +84,7 @@ public:
 
 private:
 	std::atomic<Node *> *top; // node pointer array for branches
+	std::atomic<int> *topDepths;
 	Node **NodeAlloc; //Array for pre-allocated data
 	Desc **DescAlloc; //Array for pre-allocated data
 	int num_threads;
@@ -100,9 +106,7 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 
 	while (true)
 	{
-		//int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
-
-		//Thread preferred push
+		//Thread preferred push (Take the help index if another branch is falling behind)
 		int headIndex = threadIndex[tid];
 
 		//Read top of stack
@@ -114,8 +118,23 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 			continue;
 		}
 
-		//if (tid != headIndex)
-			//std::cout << tid << "  " << headIndex << "\n";
+		int preferred = cur->depth();
+		//Check for lagging branch
+		for (int i = 0; i < num_threads; i++)
+		{
+			Node *n = top[i].load();
+
+			if (n == nullptr || i == headIndex)
+				continue;
+
+			int d = n->depth();
+			if (preferred - d >= MAX_DEPTH_DISPARITY)
+			{
+				//std::cout << preferred << " > " << d << " switching from " << headIndex << " to " << i << "\n";
+				headIndex = i;
+				break;
+			}
+		}
 
 		Desc *cur_desc = cur->desc.load();
 		elem->next(cur);
@@ -143,6 +162,8 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 				}
 				else
 				{
+					std::cout << "Inverse Stack Disabled\n";
+					exit(EXIT_FAILURE);
 					//Remove this node instead of pushing
 					if (!this->remove(tid, opn, v, headIndex, cur, popOpn, popThread))
 					{
@@ -188,8 +209,37 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 		//int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
 		//End of random pop
 
-		//Thread prefered pop
-		int headIndex = threadIndex[tid];
+		//Thread preferred pop
+		int headIndex = 0;
+
+		int highest = 0;
+		int lowest = 100000;
+		for (int i = 0; i < num_threads; i++)
+		{
+			Node *n = top[i].load();
+
+			if (n == nullptr)
+				continue;
+
+			int d = n->depth();
+
+			//std::cout << d << "\t";
+
+			if (d > highest)
+			{
+				headIndex = i;
+				highest = d;
+			}
+
+			if (d < lowest)
+			{
+				lowest = d;
+			}
+		}
+		//std::cout << "\n";
+
+		if (highest - lowest > MAX_DEPTH_DISPARITY)
+			std::cout << "Disparity of " << highest - lowest << " found \n";
 		//End of thread preferred pop
 
 		//Timestamp based pop
@@ -243,6 +293,9 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 
 				if (cur->isSentinel() || cur->type() == Pop)
 				{
+					std::cout << "Inverse Stack Disabled\n";
+					exit(EXIT_FAILURE);
+
 					Node *elem = &NodeAlloc[tid][opn];
 					elem->type(Pop);
 					elem->next(cur);
@@ -302,7 +355,8 @@ bool QStackDesc<T>::add(int tid, int opn, int headIndex, Node *cur, Node *elem)
 	cur->addPred(elem);
 
 	//Update the depth field for this node to help with balancing the tree
-	elem->depth = elem->next()->depth + 1;
+	elem->depth(elem->next()->depth() + 1);
+	topDepths[headIndex] = elem->depth();
 
 	//Update head (can be done without CAS since we own the current head of this branch via descriptor)
 	top[headIndex] = elem;
@@ -340,6 +394,7 @@ bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int
 	{
 		v = cur->value();
 		cur->next()->removePred(cur);
+		topDepths[headIndex] = cur->depth();
 		top[headIndex] = cur->next();
 		return true;
 	}
@@ -349,6 +404,7 @@ bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int
 		if (top[headIndex] == cur)
 		{
 			this->branches--;
+			topDepths[headIndex] = -1;
 			top[headIndex] = nullptr;
 		}
 		return false;
@@ -425,6 +481,9 @@ public:
 
 	void timestamp(long long t) { _timestamp = t; };
 	long long timestamp() { return _timestamp; };
+
+	int depth(int d) { _depth = d; };
+	int depth() { return _depth; };
 
 	bool predNotFull(std::atomic<Node *> *top, int num_threads)
 	{
@@ -531,7 +590,6 @@ public:
 	//std::atomic<QStackDesc::Desc> desc() { return _desc; };
 
 	std::atomic<QStackDesc::Desc *> desc;
-	int depth = 0;
 
 private:
 	T _val {NULL};
@@ -544,6 +602,7 @@ private:
 	int _opn;
 	int _thread;
 	long long _timestamp = 1;
+	int _depth = 0;
 	
 };
 
