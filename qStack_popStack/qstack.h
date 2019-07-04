@@ -110,6 +110,13 @@ bool QStack<T>::push(int tid, int opn, T v)
 			//Place our descriptor in the node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
+				//Check for ABA?
+				if (top[headIndex] != cur)
+				{
+					cur->desc = nullptr;
+					continue;
+				}
+
 				if (cur->isSentinel() || cur->type() == Push)
 				{
 					//Add node as usual
@@ -122,7 +129,8 @@ bool QStack<T>::push(int tid, int opn, T v)
 					//Remove this node instead of pushing
 					if (!this->remove(tid, opn, v, headIndex, cur))
 					{
-						d->active = false;
+						//Remove desc and retry
+						cur->desc = nullptr;
 						threadIndex[tid] = (headIndex + 1) % this->num_threads;
 					}
 					else
@@ -141,7 +149,7 @@ bool QStack<T>::push(int tid, int opn, T v)
 		{
 			int req = forkRequest.load();
 
-			if (!req && this->branches < this->num_threads)
+			if (!req && branches < this->num_threads)
 			{
 				forkRequest.compare_exchange_weak(req, 1);
 			}
@@ -181,6 +189,13 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 			//Place descriptor in node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
+				//Check for ABA?
+				if (top[headIndex] != cur)
+				{
+					cur->desc = nullptr;
+					continue;
+				}
+
 				if (cur->isSentinel() || cur->type() == Pop)
 				{
 					Node *elem = &NodeAlloc[tid][opn];
@@ -197,7 +212,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 					//Attempt to remove as normal
 					if (!this->remove(tid, opn, v, headIndex, cur))
 					{
-						d->active = false;
+						cur->desc = nullptr;
 						threadIndex[tid] = (headIndex + 1) % this->num_threads;
 					}
 					else
@@ -211,12 +226,20 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 
 		++loop;
 
-		// If we see a lot of contention try another branch
+		// If we see a lot of contention (And we are in the pop stack) create a fork request
 		if (loop > CAS_LIMIT)
 		{
-			threadIndex[tid] = (headIndex + 1) % this->num_threads;
-			//headIndex = (headIndex + 1) % this->num_threads;
+			if (cur->type() == Pop)
+			{
+				int req = forkRequest.load();
+
+				if (!req && this->branches < this->num_threads)
+				{
+					forkRequest.compare_exchange_weak(req, 1);
+				}
+			}
 			loop = 0;
+			threadIndex[tid] = (headIndex + 1) % this->num_threads;
 		}
 	}
 }
@@ -225,17 +248,16 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 template<typename T>
 bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 {
-	//Update head (can be done without CAS since we own the current head of this branch via descriptor)
-	top[headIndex] = elem;
-	elem->level(headIndex);
-
 	//Since this node is at the head, we know it has room for at least 1 more predecessor, so we add our current element
 	cur->addPred(elem);
+
+	//Update head (can be done without CAS since we own the current head of this branch via descriptor)
+	top[headIndex] = elem;
 
 	int req = forkRequest.load();
 
 	//Try to satisfy the fork request if it exists
-	if (req && forkRequest.compare_exchange_weak(req, 0))
+	if (req && cur->predNotFull(top, num_threads) && forkRequest.compare_exchange_weak(req, 0))
 	{
 		//Point an available head pointer at curr
 		for (int i = 0; i < num_threads; i++)
@@ -248,7 +270,7 @@ bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 				//CAS is necesary here since another thread may be trying to use this slot for a different head node
 				if (top[index].compare_exchange_weak(top_node, cur))
 				{
-					this->branches++;
+					branches++;
 					break;
 				}
 			}
@@ -261,7 +283,7 @@ template<typename T>
 bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
 {
 	//Check that the pred array is empty, and that a safe pop can occur
-	if (cur->hasNoPreds())
+	if (cur->hasNoPreds() && cur->notInTop(top, num_threads, headIndex))
 	{
 		v = cur->value();
 		cur->next()->removePred(cur);
@@ -273,7 +295,6 @@ bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
 		//If there is a pred pointer, we cannot pop this node. We must go somewhere else
 		if (top[headIndex] == cur)
 		{
-			std::cout << this->branches << "\n";
 			this->branches--;
 			top[headIndex] = nullptr;
 		}
@@ -286,7 +307,6 @@ void QStack<T>::dumpNodes(std::ofstream &p)
 {
 	for (int i = 0; i < this->num_threads; i++)
 	{
-		p << "Printing branch: " << i << "\n";
 		Node *n = this->top[i].load();
 		Node *pred = nullptr;
 		if (n == nullptr)
@@ -295,17 +315,11 @@ void QStack<T>::dumpNodes(std::ofstream &p)
 		//Terminate when we reach the main branch, or when the main branch reaches the end
 		do
 		{
-			if (n->pred()[1] != nullptr)
-			{
-				p << "Fork here, " << n->pred()[0] << "\t" << n->pred()[1] << "\n";
-			}
-			p << std::left << "Address: " << std::setw(10) << n << "\t\tNext: " << std::setw(10) << n->next() << "\t\tValue: " << std::setw(10) << n->value() << "\t\tType:" << std::setw(10) << (Operation)n->type() << std::setw(10) << "\t\tlevel:" << std::setw(10) << n->level() << "\n";
+			p << std::left << "Address: " << std::setw(10) << n << "\t\tNext: " << std::setw(10) << n->next() << "\t\tValue: " << std::setw(10) << n->value() << "\t\tType:" << std::setw(10) << (Operation)n->type() << "\n";;
 			pred = n;
 			n = n->next();
-		} while (n != nullptr && n->level() == i);
+		} while (n != nullptr);
 	}
-
-	p << "branches: " << this->branches << "\n";
 }
 
 template<typename T>
@@ -333,7 +347,7 @@ public:
 
 	void addPred(Node *p) 
 	{ 
-		for (auto &n : _pred)
+		for (auto n : _pred)
 		{
 			if (n == nullptr)
 			{
@@ -345,7 +359,7 @@ public:
 
 	void removePred(Node *p)
 	{
-		for (auto &n : _pred)
+		for (auto n : _pred)
 		{
 			if (n == p)
 			{
@@ -353,6 +367,39 @@ public:
 				return;
 			}
 		}
+	}
+
+	bool predNotFull(std::atomic<Node *> *top, int num_threads)
+	{
+		int pointerCount = 0;
+		for (int i = 0; i < num_threads; i++)
+		{
+			Node *n = top[i];
+			if (n == this)
+				pointerCount++;
+		}
+
+		for (auto &n : _pred)
+		{
+			if (n == nullptr && pointerCount-- == 0)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool notInTop(std::atomic<Node *> *top, int num_threads, int safeIndex)
+	{
+		for (int i = 0; i < num_threads; i++)
+		{
+			Node *n = top[i];
+			if (i != safeIndex && n == this)
+				return false;
+		}
+
+		return true;
 	}
 
 	bool hasNoPreds()
