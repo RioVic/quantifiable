@@ -131,7 +131,7 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 			if (preferred - d >= MAX_DEPTH_DISPARITY)
 			{
 				//std::cout << preferred << " > " << d << " switching from " << headIndex << " to " << i << "\n";
-				headIndex = i;
+				cur = n;
 				break;
 			}
 		}
@@ -223,8 +223,6 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 
 			int d = n->depth();
 
-			//std::cout << d << "\t";
-
 			if (d > highest)
 			{
 				headIndex = i;
@@ -236,7 +234,6 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 				lowest = d;
 			}
 		}
-		//std::cout << "\n";
 
 		if (highest - lowest > MAX_DEPTH_DISPARITY)
 			std::cout << "Disparity of " << highest - lowest << " found \n";
