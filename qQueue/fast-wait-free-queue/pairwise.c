@@ -5,7 +5,7 @@
 #include "queue.h"
 
 #ifndef LOGN_OPS
-#define LOGN_OPS 1
+#define LOGN_OPS 2
 #endif
 
 static long nops;
@@ -72,7 +72,6 @@ void exportHistory(int nprocs)
 {
   FILE *fp;
 
-  printf("Exporting History\n");
   fp = fopen("./dequeueOrder", "w");
   fprintf(fp, "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\n");
   for (int i = 0; i < nops*2; i++)
