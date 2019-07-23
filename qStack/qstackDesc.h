@@ -330,7 +330,7 @@ bool QStackDesc<T>::add(int tid, int opn, int headIndex, Node *cur, Node *elem)
 
 	//Update the depth field for this node to help with balancing the tree
 	elem->depth(elem->next()->depth() + 1);
-	topDepths[headIndex] = elem->depth();
+	//topDepths[headIndex] = elem->depth();
 
 	//Update head (can be done without CAS since we own the current head of this branch via descriptor)
 	top[headIndex] = elem;
@@ -368,7 +368,7 @@ bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int
 	{
 		v = cur->value();
 		cur->next()->removePred(cur);
-		topDepths[headIndex] = cur->depth();
+		//topDepths[headIndex] = cur->depth();
 		top[headIndex] = cur->next();
 		visibilityPoint = rdtsc();
 		return true;
@@ -379,7 +379,7 @@ bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int
 		if (top[headIndex] == cur)
 		{
 			this->branches--;
-			topDepths[headIndex] = -1;
+			//topDepths[headIndex] = -1;
 			top[headIndex] = nullptr;
 		}
 		return false;
