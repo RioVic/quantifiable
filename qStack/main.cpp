@@ -1,4 +1,3 @@
-#include "qstack.h"
 #include "qstackDesc.h"
 #include "ebs.h"
 #include "treiber_stack.h"
@@ -12,7 +11,6 @@
 #include <string>
 
 QStackDesc<int> *qD = nullptr;
-QStack<int> *q = nullptr;
 Treiber_S<int> *treiber = nullptr;
 EliminationBackoffStack<int> *ebs = nullptr;
 
@@ -129,26 +127,7 @@ int main(int argc, char** argv)
 	file.open(std::string(MODE) + std::to_string(RATIO_PUSH) + std::string(".dat"), std::ios_base::app);
 
 	std::vector<std::thread> threads;
-	if (strcmp(MODE, "QStack") == 0)
-	{
-		QStack<int> *s = new QStack<int>(NUM_THREADS, NUM_OPS/NUM_THREADS);
-		auto start = std::chrono::high_resolution_clock::now();
-
-		for (int j = 0; j < NUM_THREADS; j++)
-			threads.push_back(std::thread(&work<QStack<int>>, j, NUM_OPS/NUM_THREADS, RATIO_PUSH, s));
-
-		for (std::thread &t : threads)
-			t.join();
-
-		auto end = std::chrono::high_resolution_clock::now();
-		auto elapsed = end-start;
-		//s->dumpNodes(file);
-
-		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
-		//exportHistory(NUM_OPS, NUM_THREADS, s);
-		delete s;
-	}
-	else if (strcmp(MODE, "Treiber") == 0)
+	if (strcmp(MODE, "Treiber") == 0)
 	{
 		Treiber_S<int> *s = new Treiber_S<int>(NUM_THREADS, NUM_OPS/NUM_THREADS);
 		auto start = std::chrono::high_resolution_clock::now();

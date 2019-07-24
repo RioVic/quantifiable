@@ -103,7 +103,7 @@ public:
 
 template<class T> class EliminationBackoffStack {
 private:
-    struct Node {
+    struct __attribute__((aligned(64))) Node {
 		    T val;
 		    Node *next;
 	    };

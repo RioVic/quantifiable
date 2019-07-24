@@ -1,17 +1,14 @@
 #include <atomic>
 #include <cstdio>
-#include <stdlib.h>
 #include <ctime>
 #include <math.h>
 #include <vector>
 #include <iostream>
 #include <fstream>
 #include <iomanip>
-#include <boost/random.hpp>
 
-#define CAS_LIMIT 1
-#define MAX_FORK_AT_NODE 3
-#define MAX_DEPTH_DISPARITY 5
+#define CAS_LIMIT 3
+#define MAX_FORK_AT_NODE 2
 
 #ifndef OP_D
 #define OP_D
@@ -30,25 +27,24 @@ public:
 		forkRequest(0)
 	{
 		top = new std::atomic<Node*>[num_threads];
-		topDepths = new std::atomic<int>[num_threads];
 		NodeAlloc = new Node*[num_threads];
 		DescAlloc = new Desc*[num_threads];
 		randomGen = new boost::mt19937[num_threads];
 		randomDist = new boost::uniform_int<uint32_t>[num_threads];
+		forks = new std::atomic<Node*>[num_threads];
 
 		for (int i = 0; i < num_threads; i++)
 		{
 			top[i] = nullptr;
-			topDepths[i] = -1;
 			threadIndex.push_back(0);
 
+			forks[i] == nullptr;
 			NodeAlloc[i] = new Node[num_ops*num_threads*2];
 			DescAlloc[i] = new Desc[num_ops*num_threads*2];
 			randomGen[i].seed(time(0));
 			randomDist[i] = boost::uniform_int<uint32_t>(0, num_threads-1);
 		}
 
-		topDepths[0] = 0;
 		Node *s = new Node();
 		s->sentinel(true);
 		top[0] = s;
@@ -66,11 +62,11 @@ public:
 		delete[] DescAlloc;
 	}
 
-	bool push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread, long long timestamp);
+	bool push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread);
 
 	bool pop(int tid, int opn, T &v);
 
-	bool add(int tid, int opn, int index, Node *cur, Node *elem);
+	bool add(int tid, int opn, T v, int index, Node *cur, Node *elem);
 
 	bool remove(int tid, int opn, T &v, int index, Node *cur, int &popOpn, int &popThread);
 
@@ -78,6 +74,7 @@ public:
 
 	bool isEmpty();
 
+	std::vector<int> headIndexStats = {0,0,0,0,0,0,0,0};
 	std::vector<int> threadIndex;
 	int branches = 1;
 	boost::uniform_int<uint32_t> *randomDist;
@@ -85,30 +82,31 @@ public:
 
 private:
 	std::atomic<Node *> *top; // node pointer array for branches
-	std::atomic<int> *topDepths;
 	Node **NodeAlloc; //Array for pre-allocated data
 	Desc **DescAlloc; //Array for pre-allocated data
 	int num_threads;
 	std::atomic<int> forkRequest;
+	std::atomic<Node *> *forks;
+
 };
 
 template<typename T>
-bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread, long long timestamp)
+bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread)
 {
 	//Extract pre-allocated node
 	Node *elem = &NodeAlloc[tid][opn];
 	elem->value(ins);
 	elem->type(Push);
-	elem->timestamp(timestamp);
 	Desc *d = &DescAlloc[tid][opn];
+	d->op(Push);
 
 	int loop = 0;
-	threadIndex[tid] = tid;
 
 	while (true)
 	{
-		//Thread preferred push (Take the help index if another branch is falling behind)
+		//Check for fork request
 		int headIndex = threadIndex[tid];
+		int req = forkRequest.load();
 
 		//Read top of stack
 		Node *cur = top[headIndex].load();
@@ -117,24 +115,6 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 		{
 			threadIndex[tid] = (headIndex + 1) % this->num_threads;
 			continue;
-		}
-
-		int preferred = cur->depth();
-		//Check for lagging branch
-		for (int i = 0; i < num_threads; i++)
-		{
-			Node *n = top[i].load();
-
-			if (n == nullptr || i == headIndex)
-				continue;
-
-			int d = n->depth();
-			if (preferred - d >= MAX_DEPTH_DISPARITY)
-			{
-				//std::cout << preferred << " > " << d << " switching from " << headIndex << " to " << i << "\n";
-				cur = n;
-				break;
-			}
 		}
 
 		Desc *cur_desc = cur->desc.load();
@@ -146,44 +126,52 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 			//Place our descriptor in the node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
-				//Check for ABA?
-				if (top[headIndex] != cur)
+				Node *topCopy = top[headIndex];
+				if (topCopy != cur)
 				{
 					cur->desc = nullptr;
 					continue;
 				}
 
+				if (!cur->verifyLink(top))
+					std::cout << "error\n";
+
 				if (cur->isSentinel() || cur->type() == Push)
 				{
 					//Add node as usual
-					this->add(tid, opn, headIndex, cur, elem);
+					this->add(tid, opn, v, headIndex, cur, elem);
+
+					if (!elem->verifyLink(top))
+						std::cout << "error\n";
 
 					d->active = false;
 					return true;
 				}
 				else
 				{
-					std::cout << "Inverse Stack Disabled\n";
-					exit(EXIT_FAILURE);
 					//Remove this node instead of pushing
 					if (!this->remove(tid, opn, v, headIndex, cur, popOpn, popThread))
 					{
-						//Remove desc and retry
+						if (!cur->verifyLink(top))
+							std::cout << "error\n";
 						cur->desc = nullptr;
+						threadIndex[tid] = (headIndex + 1) % this->num_threads;
+						continue;
 					}
 					else
 					{
+						if (!cur->verifyLink(top))
+							std::cout << "error\n";
 						d->active = false;
 						return true;
 					}
 				}
 			}
 		}
-
-		loop++;
+		++loop;
 
 		// If we see a lot of contention create a fork request
-		if (loop > CAS_LIMIT)
+		if ((cur != nullptr) && loop > CAS_LIMIT)
 		{
 			int req = forkRequest.load();
 
@@ -194,6 +182,7 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 
 			loop = 0;
 			threadIndex[tid] = (headIndex + 1) % this->num_threads;
+			//headIndex = (headIndex + 1) % this->num_threads;
 		}
 	}
 }
@@ -203,73 +192,15 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 {
 	int loop = 0;
 	Desc *d = &DescAlloc[tid][opn];
+	d->op(Pop);
 
 	while (true)
 	{
-		//Random pop
-		//int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
-		//End of random pop
-
-		//Thread preferred pop
-		int headIndex = 0;
-
-		int highest = 0;
-		int lowest = 100000;
-		for (int i = 0; i < num_threads; i++)
-		{
-			Node *n = top[i].load();
-
-			if (n == nullptr)
-				continue;
-
-			int d = n->depth();
-
-			if (d > highest)
-			{
-				headIndex = i;
-				highest = d;
-			}
-
-			if (d < lowest)
-			{
-				lowest = d;
-			}
-		}
-
-		if (highest - lowest > MAX_DEPTH_DISPARITY)
-			std::cout << "Disparity of " << highest - lowest << " found \n";
-		//End of thread preferred pop
-
-		//Timestamp based pop
-		/*
-		long long highest = 0;
-		int headIndex = -1;
-		for (int i = 0; i < num_threads; i++)
-		{
-			Node *n = top[i].load();
-
-			if (n == nullptr)
-				continue;
-
-			long long ts = n->timestamp();
-			if (ts > highest)
-			{
-				highest = ts;
-				headIndex = i;
-			}
-		}
-
-		if (headIndex == -1)
-		{
-			std::cout << "Error\n";
-		}
-		*/
-		//End of timestamp based pop
-		
+		int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
 		Node *cur = top[headIndex].load();
-		//d->active = true;
+		d->active = true;
 
-		if (cur == nullptr)
+		if (cur == nullptr) 
 		{
 			threadIndex[tid] = (headIndex + 1) % this->num_threads;
 			continue;
@@ -277,92 +208,115 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 
 		Desc *cur_desc = cur->desc.load();
 
+		Node *next = cur->next();
+		Desc *next_desc = nullptr;
+
+		//If next is null, we are at the sentinel node, which means that we do not need to grab the next_desc
+		if (next != nullptr)
+			next_desc = next->desc.load();
+
 		//Check for pending operations or head pointer updates
-		if ((cur_desc == nullptr || cur_desc->active == false) && top[headIndex] == cur)
+		if ((cur_desc == nullptr || cur_desc->active == false) && (next_desc == nullptr || next_desc->active == false) && top[headIndex] == cur)
 		{
 			//Place descriptor in node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
-				if (top[headIndex] != cur)
+				if (cur->isSentinel() || next->desc.compare_exchange_weak(next_desc, d))
 				{
-					cur->desc = nullptr;
-					continue;
-				}
-
-				if (cur->isSentinel() || cur->type() == Pop)
-				{
-					std::cout << "Inverse Stack Disabled\n";
-					exit(EXIT_FAILURE);
-
-					Node *elem = &NodeAlloc[tid][opn];
-					elem->type(Pop);
-					elem->next(cur);
-
-					//Append pop operation instead of removing (there are no available nodes to pop)
-					this->add(tid, opn, headIndex, cur, elem);
-
-					d->active = false;
-					return true;
-				}
-				else
-				{
-					int pushOpn;
-					int popThread;
-
-					//Attempt to remove as normal
-					if (!this->remove(tid, opn, v, headIndex, cur, pushOpn, popThread))
+					if (top[headIndex] != cur)
 					{
 						cur->desc = nullptr;
-						threadIndex[tid] = (headIndex + 1) % this->num_threads;
+						if (next != nullptr)
+							next->desc = nullptr;
+						continue;
+					}
+
+					if (!cur->verifyLink(top))
+							std::cout << "error\n";
+
+					if (cur->isSentinel() || cur->type() == Pop)
+					{
+						Node *elem = &NodeAlloc[tid][opn];
+						elem->type(Pop);
+						elem->next(cur);
+
+						//Identifies which method this pop came from for entropy tests
+						elem->opn(opn);
+						elem->thread(tid);
+
+						//Append pop operation instead of removing (there are no available nodes to pop)
+						this->add(tid, opn, v, headIndex, cur, elem);
+
+						if (!elem->verifyLink(top))
+							std::cout << "error\n";
+
+						d->active = false;
+						if (next_desc != nullptr)
+							next_desc->active = false;
+						return true;
 					}
 					else
 					{
-						d->active = false;
-						return true;
+						int pushOpn;
+						int popThread;
+
+						//Attempt to remove as normal
+						if (!this->remove(tid, opn, v, headIndex, cur, pushOpn, popThread))
+						{
+							if (!cur->verifyLink(top))
+								std::cout << "error\n";
+							cur->desc = nullptr;
+							if (next != nullptr)
+								next->desc = nullptr;
+							threadIndex[tid] = (headIndex + 1) % this->num_threads;
+						}
+						else
+						{
+							if (!cur->verifyLink(top))
+								std::cout << "error\n";
+							d->active = false;
+							if (next_desc != nullptr)
+								next_desc->active = false;
+							return true;
+						}
 					}
+				}
+				else
+				{
+					cur->desc = nullptr;
 				}
 			}
 		}
 
-		loop++;
+		++loop;
 
-		// If we see a lot of contention (And we are in the pop stack) create a fork request
+		// If we see a lot of contention try another branch
 		if (loop > CAS_LIMIT)
 		{
-			if (cur->type() == Pop)
-			{
-				int req = forkRequest.load();
-
-				if (!req && this->branches < this->num_threads)
-				{
-					forkRequest.compare_exchange_weak(req, 1);
-				}
-			}
-			loop = 0;
 			threadIndex[tid] = (headIndex + 1) % this->num_threads;
+			//headIndex = (headIndex + 1) % this->num_threads;
+			loop = 0;
 		}
 	}
 }
 
 //Adds an arbitrary operation to the stack
 template<typename T>
-bool QStackDesc<T>::add(int tid, int opn, int headIndex, Node *cur, Node *elem)
+bool QStackDesc<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 {
 	//Since this node is at the head, we know it has room for at least 1 more predecessor, so we add our current element
-	//We must add cur to the pred list before updating top, otherwise this node will be visible without being fully linked
+	//We must add cur to the pred first, as the next line will make elem visible to other threads. This create a window where 
+	//cur is in the list but it is not linked to elem
 	cur->addPred(elem);
-
-	//Update the depth field for this node to help with balancing the tree
-	elem->depth(elem->next()->depth() + 1);
-	topDepths[headIndex] = elem->depth();
 
 	//Update head (can be done without CAS since we own the current head of this branch via descriptor)
 	top[headIndex] = elem;
+	elem->level(headIndex);
 
 	int req = forkRequest.load();
 
 	//Try to satisfy the fork request if it exists
-	if (req && cur->predNotFull(top, num_threads) && forkRequest.compare_exchange_weak(req, 0))
+	if (cur->predNotFull(top, num_threads) && req && forkRequest.compare_exchange_weak(req, 0))
 	{
 		//Point an available head pointer at curr
 		for (int i = 0; i < num_threads; i++)
@@ -391,9 +345,11 @@ bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int
 	if (cur->hasNoPreds() && cur->notInTop(top, num_threads, headIndex))
 	{
 		v = cur->value();
+		popOpn = cur->opn();
+		popThread = cur->thread();
 		cur->next()->removePred(cur);
-		topDepths[headIndex] = cur->depth();
 		top[headIndex] = cur->next();
+		cur->next(nullptr);
 		return true;
 	}
 	else
@@ -402,7 +358,6 @@ bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int
 		if (top[headIndex] == cur)
 		{
 			this->branches--;
-			topDepths[headIndex] = -1;
 			top[headIndex] = nullptr;
 		}
 		return false;
@@ -477,12 +432,6 @@ public:
 	void thread(int tid) { _thread = tid; };
 	int thread() { return _thread; };
 
-	void timestamp(long long t) { _timestamp = t; };
-	long long timestamp() { return _timestamp; };
-
-	int depth(int d) { _depth = d; };
-	int depth() { return _depth; };
-
 	bool predNotFull(std::atomic<Node *> *top, int num_threads)
 	{
 		int pointerCount = 0;
@@ -514,6 +463,8 @@ public:
 				return;
 			}
 		}
+
+		std::cout << "we shoul not be here\n";
 	}
 
 	bool verifyLink(std::atomic<Node *> *top)
@@ -531,10 +482,12 @@ public:
 			return true;
 		}
 
+		Node *copy[2];
 		Node **preds = _next->pred();
 		for (int i = 0; i < 2; i++)
 		{
 			Node *n = preds[i];
+			copy[i] = n;
 			if (n == this)
 			{
 				return true;
@@ -546,22 +499,25 @@ public:
 
 	void removePred(Node *p)
 	{
-		for (int i = 0; i < MAX_FORK_AT_NODE; i++)
+		Node *copy[2];
+		for (int i = 0; i < 2; i++)
 		{
 			Node *n = _pred[i];
+			copy[i] = n;
 			if (n == p)
 			{
 				_pred[i] = nullptr;
 				return;
 			}
 		}
+
+		std::cout << "Should not happen\n";
 	}
 
 	bool hasNoPreds()
 	{
-		for (int i = 0; i < MAX_FORK_AT_NODE; i++)
+		for (auto &n : _pred)
 		{
-			Node *n = _pred[i];
 			if (n != nullptr)
 				return false;
 		}
@@ -599,13 +555,11 @@ private:
 	Operation _type;
 	int _opn;
 	int _thread;
-	long long _timestamp = 1;
-	int _depth = 0;
 	
 };
 
 template<typename T>
-class __attribute__((aligned(64))) QStackDesc<T>::Desc
+class QStackDesc<T>::Desc
 {
 public:
 	Desc (Operation op) : _op(op) { active = true; };

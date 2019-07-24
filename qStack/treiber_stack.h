@@ -9,7 +9,7 @@
 
 template<typename T>
 class Treiber_S {
-    struct Node 
+    struct __attribute__((aligned(64))) Node 
     {
         T val;
         Node *next;
