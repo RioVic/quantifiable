@@ -56,7 +56,6 @@ void enqueue(queue_t * q, handle_t * handle, void * data)
 		//If tail_next is null, we must lazily catch up the tail pointer
 		if (tail_next != NULL)
 		{
-			//printf("Hey\n");
 			CAS(&q->tail[index], &tail, tail_next);
 			continue;
 		}

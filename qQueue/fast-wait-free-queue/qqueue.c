@@ -8,9 +8,11 @@ void queue_init(queue_t * q, int nprocs)
 	q->nprocs = nprocs;
 	q->head = malloc(q->nprocs * sizeof(node_t *));
 	q->tail = malloc(q->nprocs * sizeof(node_t *));
+	q->topDepths = align_malloc(PAGE_SIZE, sizeof(int) * nprocs);
 
 	for (int i = 0; i < q->nprocs; i++)
 	{
+		q->topDepths[i] = 0;
 		node_t *node = malloc(sizeof(node_t));
   		node->next = NULL;
 
@@ -44,34 +46,23 @@ void enqueue(queue_t * q, handle_t * handle, void * data)
 		tail = q->tail[index];
 		tail_next = tail->next;
 
-
-		/*If tail_next is null, we must lazily catch up the tail pointer
-		if (tail_next != NULL)
-		{
-			//printf("Hey\n");
-			CAS(&q->tail[index], &tail, tail_next);
-			continue;
-		}*/
-
 		//Check if the queue is empty, or that there are no pending dequeue operations that need to be matched
 		if (tail_next == NULL || tail->op == 1)
 		{
+			if (q->topDepths[index] > (q->topDepths[(index+1)%q->nprocs]) + 5
+				|| q->topDepths[index] > (q->topDepths[(index-1)%q->nprocs]) + 5)
+				continue;
+
 			tail->next = node;
 			q->tail[index] = node;
+			q->topDepths[index]++;
 			break;
-			/*Add our node to the list, update the tail pointer lazily
-			if (CAS(&tail->next, &tail_next, node))
-			{
-				//Try once to update the tail pointer
-				//If we fail, it means some other thread already did it
-				CAS(&q->tail[index], &tail, node);
-				break;
-			}*/
 		}
 		else
 		{
 			node_t *head = q->head[index];
 			q->head[index] = head->next;
+			q->topDepths[index]--;
 			free(head);
 			break;
 		}	
@@ -85,13 +76,6 @@ void * dequeue(queue_t * q, handle_t * handle)
 
 	while (1)
 	{
-		/*If tail_next is null, we must lazily catch up the tail pointer
-		if (tail_next != NULL)
-		{
-			CAS(&q->tail[index], &tail, tail_next);
-			continue;
-		}*/
-
 		//Check if the queue if there are any nodes to dequeue, or that there are other dequeues waiting for a matching enqueue
 		if (q->head[index]->next == NULL || q->tail[index]->op == 0)
 		{
@@ -102,6 +86,7 @@ void * dequeue(queue_t * q, handle_t * handle)
 
 			q->tail[index]->next = node;
 			q->tail[index] = node;
+			q->topDepths[index]++;
 			break;
 		}
 		else
@@ -109,6 +94,7 @@ void * dequeue(queue_t * q, handle_t * handle)
 			node_t *head = q->head[index];
 			data = head->next->data;
 			q->head[index] = head->next;
+			q->topDepths[index]--;
 			free(head);
 			break;
 		}

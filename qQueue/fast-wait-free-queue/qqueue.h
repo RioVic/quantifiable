@@ -14,8 +14,9 @@ typedef struct _node_t {
 typedef struct _queue_t {
   struct _node_t ** volatile head DOUBLE_CACHE_ALIGNED;
   struct _node_t ** volatile tail DOUBLE_CACHE_ALIGNED;
-  int *threadIndex;
+  int volatile *threadIndex;
   int nprocs;
+  int volatile *topDepths DOUBLE_CACHE_ALIGNED;
 } queue_t DOUBLE_CACHE_ALIGNED;
 
 typedef struct _handle_t {
