@@ -16,6 +16,7 @@ struct __attribute__((aligned(64))) timestamp
 {
 	long long invoked;
 	long long returned;
+	long long vp; //Visibility Point
 	std::string type;
 	int val;
 };
@@ -86,6 +87,7 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 			if (val != -11)
 			{
 				ts[thread_id][i].returned = returned;
+				ts[thread_id][i].vp = visibilityPoint;
 				ts[thread_id][i].type = "Pop";
 				ts[thread_id][i].val = val;
 			}
@@ -125,6 +127,7 @@ void exportHistory(int num_ops, int num_threads, T *s)
 
 			t.invoked = invoked;
 			t.returned = returned;
+			t.vp = visibilityPoint;
 			t.val = val;
 			t.type = "Pop";
 
@@ -133,31 +136,31 @@ void exportHistory(int num_ops, int num_threads, T *s)
 		op++;
 	}
 
-	struct timestamp operation;
+	struct timestamp *operation;
 
-	f2 << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\n";
+	f2 << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\n";
 	for (int i = 0; i < num_ops; i++)
 	{
 		for (int k = 0; k < num_threads; k++)
 		{
-			operation = ts[k][i];
+			operation = &ts[k][i];
 
-			if (operation.invoked == -1)
+			if (operation->invoked == -1)
 			{
 				std::cout << "Error, blank timestamp found in history\n";
 				exit(EXIT_FAILURE);
 			}
 
-			f2 << "AMD\t" << "QStack\t" << operation.type << "\t" << k << "\t" << "x" << "\t" << operation.val << "\t" << operation.invoked << "\t" << operation.returned << "\n";
+			f2 << "AMD\t" << "QStack\t" << operation->type << "\t" << k << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\n";
 		}
 	}
 
 	//Print remaining overflow ops
 	for (int i = 0; i < overflowTimestamps.size(); i++)
 	{
-		operation = overflowTimestamps[i];
+		operation = &overflowTimestamps[i];
 
-		f2 << "AMD\t" << "QStack\t" << operation.type << "\t" << "0" << "\t" << "x" << "\t" << operation.val << "\t" << operation.invoked << "\t" << operation.returned << "\n";
+			f2 << "AMD\t" << "QStack\t" << operation->type << "\t" << "0" << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\n";
 	}
 }
 
