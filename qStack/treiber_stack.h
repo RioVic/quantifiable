@@ -1,3 +1,4 @@
+#include "rdtsc.h"
 #include<stdio.h>
 #include<stdlib.h>
 #include<thread>
@@ -61,7 +62,7 @@ class Treiber_S {
             return true;
         }
 
-        bool pop(int tid, int opn, T &v) {
+        bool pop(int tid, int opn, T &v, long long &visibilityPoint) {
             Node *t;
             do {
                 t = head.load();

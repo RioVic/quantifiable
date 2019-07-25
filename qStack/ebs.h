@@ -1,3 +1,4 @@
+#include "rdtsc.h"
 #include<stdio.h>
 #include<stdlib.h>
 #include<thread>
@@ -168,7 +169,7 @@ public:
 		return false;
 	}
 
-	bool pop(int tid, int i, T &x) 
+	bool pop(int tid, int i, T &x, long long &visibilityPoint) 
 	{
 		for (;;) {
 			Node *t = head.load();

@@ -1,3 +1,4 @@
+#include "rdtsc.h"
 #include <atomic>
 #include <cstdio>
 #include <stdlib.h>
@@ -68,11 +69,11 @@ public:
 
 	bool push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread, long long timestamp);
 
-	bool pop(int tid, int opn, T &v);
+	bool pop(int tid, int opn, T &v, long long &visibilityPoint);
 
 	bool add(int tid, int opn, int index, Node *cur, Node *elem);
 
-	bool remove(int tid, int opn, T &v, int index, Node *cur, int &popOpn, int &popThread);
+	bool remove(int tid, int opn, T &v, int index, Node *cur, int &popOpn, int &popThread, long long &visibilityPoint);
 
 	void dumpNodes(std::ofstream &p);
 
@@ -165,8 +166,9 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 				{
 					std::cout << "Inverse Stack Disabled\n";
 					exit(EXIT_FAILURE);
+					long long vp;
 					//Remove this node instead of pushing
-					if (!this->remove(tid, opn, v, headIndex, cur, popOpn, popThread))
+					if (!this->remove(tid, opn, v, headIndex, cur, popOpn, popThread, vp))
 					{
 						//Remove desc and retry
 						cur->desc = nullptr;
@@ -199,7 +201,7 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 }
 
 template<typename T>
-bool QStackDesc<T>::pop(int tid, int opn, T& v)
+bool QStackDesc<T>::pop(int tid, int opn, T& v, long long &visibilityPoint)
 {
 	int loop = 0;
 	Desc *d = &DescAlloc[tid][opn];
@@ -210,11 +212,11 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 		//int headIndex = randomDist[tid](randomGen[tid]); //Choose pop index randomly
 		//End of random pop
 
-		//Thread preferred pop
+		//Depth based pop
 		int headIndex = 0;
 
 		int highest = 0;
-		int lowest = 100000;
+		int lowest = INT_MAX;
 		for (int i = 0; i < num_threads; i++)
 		{
 			Node *n = top[i].load();
@@ -238,33 +240,7 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 
 		if (highest - lowest > MAX_DEPTH_DISPARITY)
 			std::cout << "Disparity of " << highest - lowest << " found \n";
-		//End of thread preferred pop
-
-		//Timestamp based pop
-		/*
-		long long highest = 0;
-		int headIndex = -1;
-		for (int i = 0; i < num_threads; i++)
-		{
-			Node *n = top[i].load();
-
-			if (n == nullptr)
-				continue;
-
-			long long ts = n->timestamp();
-			if (ts > highest)
-			{
-				highest = ts;
-				headIndex = i;
-			}
-		}
-
-		if (headIndex == -1)
-		{
-			std::cout << "Error\n";
-		}
-		*/
-		//End of timestamp based pop
+		//End of Depth based pop
 		
 		Node *cur = top[headIndex].load();
 		//d->active = true;
@@ -310,7 +286,7 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 					int popThread;
 
 					//Attempt to remove as normal
-					if (!this->remove(tid, opn, v, headIndex, cur, pushOpn, popThread))
+					if (!this->remove(tid, opn, v, headIndex, cur, pushOpn, popThread, visibilityPoint))
 					{
 						cur->desc = nullptr;
 						threadIndex[tid] = (headIndex + 1) % this->num_threads;
@@ -385,7 +361,7 @@ bool QStackDesc<T>::add(int tid, int opn, int headIndex, Node *cur, Node *elem)
 
 //Removes an arbitrary operation from the stack
 template<typename T>
-bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int &popOpn, int &popThread)
+bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int &popOpn, int &popThread, long long &visibilityPoint)
 {
 	//Check that the pred array is empty, and that a safe pop can occur
 	if (cur->hasNoPreds() && cur->notInTop(top, num_threads, headIndex))
@@ -394,6 +370,7 @@ bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int
 		cur->next()->removePred(cur);
 		topDepths[headIndex] = cur->depth();
 		top[headIndex] = cur->next();
+		visibilityPoint = rdtsc();
 		return true;
 	}
 	else
