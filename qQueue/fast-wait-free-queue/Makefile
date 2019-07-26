@@ -46,7 +46,7 @@ $(TESTS): harness.o
 ifeq (${HALFHALF}, 1)
 $(TESTS): halfhalf.o
 else
-$(TESTS): pairwise.o
+$(TESTS): entropy.o
 endif
 
 msqueue lcrq qqueue: hzdptr.o xxhash.o
