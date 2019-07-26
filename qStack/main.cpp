@@ -19,6 +19,7 @@ struct __attribute__((aligned(64))) timestamp
 	long long vp; //Visibility Point
 	std::string type;
 	int val;
+	long key;
 };
 
 QStackDesc<int> *qD = nullptr;
@@ -28,6 +29,12 @@ EliminationBackoffStack<int> *ebs = nullptr;
 struct timestamp **ts;
 std::vector<timestamp> overflowTimestamps;
 struct timestamp *idealCaseTimestamps;
+int overflowOpCount = 0;
+
+int NUM_THREADS;
+int NUM_OPS;
+int RATIO_PUSH;
+char* MODE;
 
 template<class T>
 void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
@@ -96,6 +103,7 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 		}
 
 		ts[thread_id][i].invoked = invoked;
+		ts[thread_id][i].key = (thread_id) + (NUM_THREADS * i);
 	}
 }
 
@@ -105,7 +113,7 @@ template<class T>
 void exportHistory(int num_ops, int num_threads, T *s)
 {
 	std::ofstream f2;
-	f2.open(std::string("AMD_") + std::string("Qstack_") + std::to_string(num_threads) + std::string("t_100.dat"), std::ios_base::app);
+	f2.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(RATIO_PUSH) + std::string("_parallel.dat"), std::ios_base::app);
 
 	//Pop until empty
 	long long invoked;
@@ -138,8 +146,8 @@ void exportHistory(int num_ops, int num_threads, T *s)
 
 	struct timestamp *operation;
 
-	f2 << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\n";
-	for (int i = 0; i < num_ops; i++)
+	f2 << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\n";
+	for (int i = 0; i < num_ops - 1; i++)
 	{
 		for (int k = 0; k < num_threads; k++)
 		{
@@ -151,25 +159,29 @@ void exportHistory(int num_ops, int num_threads, T *s)
 				exit(EXIT_FAILURE);
 			}
 
-			f2 << "AMD\t" << "QStack\t" << operation->type << "\t" << k << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\n";
+			f2 << "AMD\t" << "QStack\t" << operation->type << "\t" << k << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\t" << ((operation->type == "Push") ? operation->invoked : operation->vp) << "\n";
 		}
 	}
+
+	overflowOpCount = (num_ops*num_threads) + overflowTimestamps.size();
 
 	//Print remaining overflow ops
 	for (int i = 0; i < overflowTimestamps.size(); i++)
 	{
 		operation = &overflowTimestamps[i];
 
-			f2 << "AMD\t" << "QStack\t" << operation->type << "\t" << "0" << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\n";
+			f2 << "AMD\t" << "QStack\t" << operation->type << "\t" << "0" << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\t" << ((operation->type == "Push") ? operation->invoked : operation->vp) << "\n";
 	}
 }
 
 bool compareTimestamp(timestamp t1, timestamp t2)
 {
-	long long t1Time = (t1.type == "Push") ? t1.invoked : t1.returned;
-	long long t2Time = (t2.type == "Push") ? t2.invoked : t2.returned;
+	//long long t1Time = (t1.type == "Push") ? t1.invoked : t1.vp;
+	//long long t2Time = (t2.type == "Push") ? t2.invoked : t2.vp;
 
-	return (t1Time < t2Time);
+	//return (t1Time < t2Time);
+
+	return (t1.invoked < t2.invoked);
 }
 
 //Repeats the parallel history on a single thread and returns the "ideal case" history
@@ -193,6 +205,7 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 		history.push_back(overflowTimestamps[i]);
 	}
 	std::sort(history.begin(), history.end(), compareTimestamp);
+	idealCaseTimestamps = new timestamp[history.size()];
 
 	//Run the test sequentially and record the results
 	long long invoked;
@@ -203,7 +216,7 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 	bool result;
 	int r;
 	
-	for (int i = 0; i < num_ops_total; i++)
+	for (int i = 0; i < history.size(); i++)
 	{
 		val = -11;
 
@@ -229,13 +242,15 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 		}
 		else if (history[i].type == "Pop")
 		{
-			result = s->pop(0, i, val);
+			long long vp;
+			result = s->pop(0, i, val, vp);
 			returned = rdtsc();
 
 			//Normal case
 			if (val != 11)
 			{
 				idealCaseTimestamps[i].returned = returned;
+				idealCaseTimestamps[i].vp = vp;
 				idealCaseTimestamps[i].type = "Pop";
 				idealCaseTimestamps[i].val = val;
 			}
@@ -250,7 +265,24 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 	}
 
 	//Export results to file
+	std::ofstream f2;
+	f2.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(RATIO_PUSH) + std::string("_ideal.dat"), std::ios_base::app);
 
+	struct timestamp *operation;
+
+	f2 << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\n";
+	for (int i = 0; i < history.size(); i++)
+	{
+		operation = &idealCaseTimestamps[i];
+
+		if (operation->invoked == -1)
+		{
+			std::cout << "Error, blank timestamp found in history\n";
+			exit(EXIT_FAILURE);
+		}
+
+		f2 << "AMD\t" << "QStack\t" << operation->type << "\t" << "0" << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\t" << ((operation->type == "Push") ? operation->invoked : operation->vp) << "\n";
+	}
 }
 
 int main(int argc, char** argv)
@@ -261,13 +293,12 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	int NUM_THREADS = atoi(argv[1]);
-	int NUM_OPS = atoi(argv[2]);
-	int RATIO_PUSH = atoi(argv[3]);
-	char* MODE = argv[4];
+	NUM_THREADS = atoi(argv[1]);
+	NUM_OPS = atoi(argv[2]);
+	RATIO_PUSH = atoi(argv[3]);
+	MODE = argv[4];
 
 	ts = new timestamp*[NUM_THREADS];
-	idealCaseTimestamps = new timestamp[NUM_OPS];
 
 	for (int i = 0; i < NUM_THREADS; i++)
 	{
@@ -295,6 +326,9 @@ int main(int argc, char** argv)
 		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
 		exportHistory(NUM_OPS/NUM_THREADS, NUM_THREADS, s);
 		delete s;
+
+		s = new Treiber_S<int>(1, overflowOpCount);
+		executeHistorySequentially(NUM_OPS, NUM_THREADS, s);
 	}
 	else if (strcmp(MODE, "EBS") == 0)
 	{
@@ -313,6 +347,9 @@ int main(int argc, char** argv)
 		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
 		exportHistory(NUM_OPS/NUM_THREADS, NUM_THREADS, s);
 		delete s;
+
+		s = new EliminationBackoffStack<int>(1, overflowOpCount);
+		executeHistorySequentially(NUM_OPS, NUM_THREADS, s);
 	}
 	else if (strcmp(MODE, "QStackDesc") == 0)
 	{
@@ -331,6 +368,9 @@ int main(int argc, char** argv)
 		file << MODE << "\t" << RATIO_PUSH << "-" << (100-RATIO_PUSH) << "\t" << NUM_THREADS << "\t" << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << "\t" << NUM_OPS << "\n";
 		exportHistory(NUM_OPS/NUM_THREADS, NUM_THREADS, s);
 		delete s;
+
+		s = new QStackDesc<int>(1, overflowOpCount);
+		executeHistorySequentially(NUM_OPS, NUM_THREADS, s);
 	}
 	else
 	{
