@@ -36,6 +36,37 @@ int NUM_OPS;
 int RATIO_PUSH;
 char* MODE;
 
+void logOp(struct timestamp &ts, long long vp, std::string type, int val)
+{
+	ts.vp = vp;
+	ts.type = type;
+	ts.val = val;
+}
+
+void logOp(struct timestamp &ts, long long invoked, long key)
+{
+	ts.invoked = invoked;
+	ts.key = key;
+}
+
+void writeToFile(std::ofstream &f, int thread_id, int num_ops, struct timestamp *ts)
+{
+	struct timestamp *operation;
+
+	for (int i = 0; i < num_ops - 1; i++)
+	{
+		operation = &ts[i];
+
+		if (operation->invoked == -1)
+		{
+			std::cout << "Error, blank timestamp found in history\n";
+			exit(EXIT_FAILURE);
+		}
+
+		f << "AMD\t" << MODE << "\t" << operation->type << "\t" << thread_id << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\t" << ((operation->type == "Push") ? operation->invoked : operation->vp) << "\t" << operation->key << "\n";
+	}
+}
+
 template<class T>
 void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 {
@@ -52,58 +83,42 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 	int val;
 	bool result;
 	int r;
+	int key;
 
 	for (int i = 0; i < num_ops; i++)
 	{
 		r = randomDist(randomGen);
 		val = -11;
+		key = (thread_id) + (NUM_THREADS * i);
 
-		//Log invocation and return, as well as execute a random method
+		//Log invocation
 		invoked = rdtsc();
 
 		if ((r % 100) < push_ratio)
 		{
 			result = s->push(thread_id, i, insert, val, popOpn, popThread, invoked);
-			returned = rdtsc();
 
 			//"Push acts as Pop case"
 			if (val != -11)
-			{
-				//This push matched with a pending pop
-				//Find the pending pop, update its return timestamp
-				//std::cout << "Pending pop found\n" << popOpn << "\t" << popThread << "\t" << insert << "\n";
-				ts[popThread][popOpn].returned = returned;
-				ts[popThread][popOpn].type = "Pop";
-				ts[popThread][popOpn].val = val;
-			}
+				logOp(ts[popThread][popOpn], -1, "Pop", val);
 			else
-			{
-				ts[thread_id][i].returned = returned;
-				ts[thread_id][i].type = "Push";
-				ts[thread_id][i].val = insert;
-			}
+				logOp(ts[thread_id][i], -1, "Push", insert);
 
 			insert += num_threads;
 		}
 		else
 		{
 			result = s->pop(thread_id, i, val, visibilityPoint);
-			returned = rdtsc();
 
 			//Normal case
 			if (val != -11)
-			{
-				ts[thread_id][i].returned = returned;
-				ts[thread_id][i].vp = visibilityPoint;
-				ts[thread_id][i].type = "Pop";
-				ts[thread_id][i].val = val;
-			}
+				logOp(ts[thread_id][i], visibilityPoint, "Pop", val);
 
 			//If we don't get a value back here, it means the pop is pending, and that we must get the return time when a push() operation satisfies it	
 		}
 
-		ts[thread_id][i].invoked = invoked;
-		ts[thread_id][i].key = (thread_id) + (NUM_THREADS * i);
+		//Log shared fields (invocation and key)
+		logOp(ts[thread_id][i], invoked, key);
 	}
 }
 
@@ -112,8 +127,8 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 template<class T>
 void exportHistory(int num_ops, int num_threads, T *s)
 {
-	std::ofstream f2;
-	f2.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(RATIO_PUSH) + std::string("_parallel.dat"), std::ios_base::app);
+	std::ofstream parallelF;
+	parallelF.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(RATIO_PUSH) + std::string("_parallel.dat"), std::ios_base::app);
 
 	//Pop until empty
 	long long invoked;
@@ -144,34 +159,15 @@ void exportHistory(int num_ops, int num_threads, T *s)
 		op++;
 	}
 
-	struct timestamp *operation;
-
-	f2 << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\n";
-	for (int i = 0; i < num_ops - 1; i++)
+	parallelF << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\tkey\n";
+	for (int k = 0; k < num_threads; k++)
 	{
-		for (int k = 0; k < num_threads; k++)
-		{
-			operation = &ts[k][i];
-
-			if (operation->invoked == -1)
-			{
-				std::cout << "Error, blank timestamp found in history\n";
-				exit(EXIT_FAILURE);
-			}
-
-			f2 << "AMD\t" << "QStack\t" << operation->type << "\t" << k << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\t" << ((operation->type == "Push") ? operation->invoked : operation->vp) << "\n";
-		}
+		writeToFile(parallelF, k, num_ops, ts[k]);
 	}
 
-	overflowOpCount = (num_ops*num_threads) + overflowTimestamps.size();
-
-	//Print remaining overflow ops
-	for (int i = 0; i < overflowTimestamps.size(); i++)
-	{
-		operation = &overflowTimestamps[i];
-
-			f2 << "AMD\t" << "QStack\t" << operation->type << "\t" << "0" << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\t" << ((operation->type == "Push") ? operation->invoked : operation->vp) << "\n";
-	}
+	struct timestamp arr[overflowTimestamps.size()];
+	std::copy(overflowTimestamps.begin(), overflowTimestamps.end(), arr);
+	writeToFile(parallelF, 0, overflowTimestamps.size(), arr);
 }
 
 bool compareTimestamp(timestamp t1, timestamp t2)
@@ -199,7 +195,6 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 		}
 	}
 
-	//Print remaining overflow ops
 	for (int i = 0; i < overflowTimestamps.size(); i++)
 	{
 		history.push_back(overflowTimestamps[i]);
@@ -224,36 +219,21 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 		if (history[i].type == "Push")
 		{
 			result = s->push(0, i, history[i].val, val, popOpn, popThread, invoked);
-			returned = rdtsc();
 
 			//Push acts as pop case
 			if (val != -11)
-			{
-				idealCaseTimestamps[popOpn].returned = returned;
-				idealCaseTimestamps[popOpn].type = "Pop";
-				idealCaseTimestamps[popOpn].val = val;
-			}
+				logOp(idealCaseTimestamps[popOpn], -1, "Pop", val);
 			else //Normal case
-			{
-				idealCaseTimestamps[i].returned = returned;
-				idealCaseTimestamps[i].type = "Push";
-				idealCaseTimestamps[i].val = history[i].val;
-			}
+				logOp(idealCaseTimestamps[popOpn], -1, "Push", history[i].val);
 		}
 		else if (history[i].type == "Pop")
 		{
 			long long vp;
 			result = s->pop(0, i, val, vp);
-			returned = rdtsc();
 
 			//Normal case
 			if (val != 11)
-			{
-				idealCaseTimestamps[i].returned = returned;
-				idealCaseTimestamps[i].vp = vp;
-				idealCaseTimestamps[i].type = "Pop";
-				idealCaseTimestamps[i].val = val;
-			}
+				logOp(idealCaseTimestamps[popOpn], vp, "Pop", val);
 		}
 		else
 		{
@@ -261,28 +241,16 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 			exit(EXIT_FAILURE);
 		}
 
-		idealCaseTimestamps[i].invoked = invoked;
+		//Log shared fields (invocation and key)
+		logOp(idealCaseTimestamps[popOpn], invoked, history[i].key);
 	}
 
 	//Export results to file
-	std::ofstream f2;
-	f2.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(RATIO_PUSH) + std::string("_ideal.dat"), std::ios_base::app);
+	std::ofstream idealF;
+	idealF.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(RATIO_PUSH) + std::string("_ideal.dat"), std::ios_base::app);
+	idealF << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\tkey\n";
 
-	struct timestamp *operation;
-
-	f2 << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\n";
-	for (int i = 0; i < history.size(); i++)
-	{
-		operation = &idealCaseTimestamps[i];
-
-		if (operation->invoked == -1)
-		{
-			std::cout << "Error, blank timestamp found in history\n";
-			exit(EXIT_FAILURE);
-		}
-
-		f2 << "AMD\t" << "QStack\t" << operation->type << "\t" << "0" << "\t" << "x" << "\t" << operation->val << "\t" << operation->invoked << "\t" << operation->returned << "\t" << operation->vp << "\t" << ((operation->type == "Push") ? operation->invoked : operation->vp) << "\n";
-	}
+	writeToFile(idealF, 0, history.size(), idealCaseTimestamps);
 }
 
 int main(int argc, char** argv)
