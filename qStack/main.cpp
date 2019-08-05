@@ -59,7 +59,7 @@ void writeToFile(std::ofstream &f, int thread_id, int num_ops, struct timestamp 
 
 		if (operation->invoked == -1)
 		{
-			std::cout << "Error, blank timestamp found in history\n";
+			std::cout << "Error, blank timestamp found in history, id: " << thread_id << "\top: " << i << "\n";
 			exit(EXIT_FAILURE);
 		}
 
@@ -159,13 +159,16 @@ void exportHistory(int num_ops, int num_threads, T *s)
 		op++;
 	}
 
+	overflowOpCount = overflowTimestamps.size();
+
 	parallelF << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\tkey\n";
 	for (int k = 0; k < num_threads; k++)
 	{
 		writeToFile(parallelF, k, num_ops, ts[k]);
 	}
 
-	struct timestamp arr[overflowTimestamps.size()];
+	struct timestamp *arr;
+	arr = new timestamp[overflowTimestamps.size()];
 	std::copy(overflowTimestamps.begin(), overflowTimestamps.end(), arr);
 	writeToFile(parallelF, 0, overflowTimestamps.size(), arr);
 }
@@ -224,7 +227,7 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 			if (val != -11)
 				logOp(idealCaseTimestamps[popOpn], -1, "Pop", val);
 			else //Normal case
-				logOp(idealCaseTimestamps[popOpn], -1, "Push", history[i].val);
+				logOp(idealCaseTimestamps[i], -1, "Push", history[i].val);
 		}
 		else if (history[i].type == "Pop")
 		{
@@ -233,7 +236,7 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 
 			//Normal case
 			if (val != 11)
-				logOp(idealCaseTimestamps[popOpn], vp, "Pop", val);
+				logOp(idealCaseTimestamps[i], vp, "Pop", val);
 		}
 		else
 		{
@@ -242,7 +245,7 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 		}
 
 		//Log shared fields (invocation and key)
-		logOp(idealCaseTimestamps[popOpn], invoked, history[i].key);
+		logOp(idealCaseTimestamps[i], invoked, history[i].key);
 	}
 
 	//Export results to file
@@ -250,7 +253,7 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 	idealF.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(RATIO_PUSH) + std::string("_ideal.dat"), std::ios_base::app);
 	idealF << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\tkey\n";
 
-	writeToFile(idealF, 0, history.size(), idealCaseTimestamps);
+	writeToFile(idealF, 0, history.size() - 1, idealCaseTimestamps);
 }
 
 int main(int argc, char** argv)
@@ -337,8 +340,8 @@ int main(int argc, char** argv)
 		exportHistory(NUM_OPS/NUM_THREADS, NUM_THREADS, s);
 		delete s;
 
-		s = new QStackDesc<int>(1, overflowOpCount);
-		executeHistorySequentially(NUM_OPS, NUM_THREADS, s);
+		QStackDesc<int> *d = new QStackDesc<int>(1, overflowOpCount);
+		executeHistorySequentially(NUM_OPS, NUM_THREADS, d);
 	}
 	else
 	{
