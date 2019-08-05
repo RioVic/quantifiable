@@ -53,7 +53,7 @@ void writeToFile(std::ofstream &f, int thread_id, int num_ops, struct timestamp 
 {
 	struct timestamp *operation;
 
-	for (int i = 0; i < num_ops - 1; i++)
+	for (int i = 0; i < num_ops; i++)
 	{
 		operation = &ts[i];
 
@@ -134,7 +134,7 @@ void exportHistory(int num_ops, int num_threads, T *s)
 	long long invoked;
 	long long returned;
 	long long visibilityPoint;
-	int op = num_ops++;
+	int op = 0;
 	while (!s->isEmpty())
 	{
 		int val = -11;
@@ -153,7 +153,7 @@ void exportHistory(int num_ops, int num_threads, T *s)
 			t.vp = visibilityPoint;
 			t.val = val;
 			t.type = "Pop";
-			t.key = op;
+			t.key = NUM_OPS + op;
 
 			overflowTimestamps.push_back(t);
 		}
@@ -165,7 +165,7 @@ void exportHistory(int num_ops, int num_threads, T *s)
 	parallelF << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\tkey\n";
 	for (int k = 0; k < num_threads; k++)
 	{
-		writeToFile(parallelF, k, num_ops, ts[k]);
+		writeToFile(parallelF, k, (NUM_OPS/NUM_THREADS), ts[k]);
 	}
 
 	struct timestamp *arr;
@@ -236,7 +236,7 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 			result = s->pop(0, i, val, vp);
 
 			//Normal case
-			if (val != 11)
+			if (val != -11)
 				logOp(idealCaseTimestamps[i], vp, "Pop", val);
 		}
 		else
@@ -254,7 +254,7 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 	idealF.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(RATIO_PUSH) + std::string("_ideal.dat"), std::ios_base::app);
 	idealF << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\tkey\n";
 
-	writeToFile(idealF, 0, history.size() - 1, idealCaseTimestamps);
+	writeToFile(idealF, 0, history.size(), idealCaseTimestamps);
 }
 
 int main(int argc, char** argv)
