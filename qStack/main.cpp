@@ -153,6 +153,7 @@ void exportHistory(int num_ops, int num_threads, T *s)
 			t.vp = visibilityPoint;
 			t.val = val;
 			t.type = "Pop";
+			t.key = op;
 
 			overflowTimestamps.push_back(t);
 		}
