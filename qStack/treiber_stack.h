@@ -70,6 +70,7 @@ class Treiber_S {
                 if (!(t->next))
                     return false;
             } while (!head.compare_exchange_weak(t, t->next));
+            visibilityPoint = rdtsc();
             v = t->val;
             return true;
         }

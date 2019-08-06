@@ -14,6 +14,10 @@ struct operation
 	long long timestamp;
 	int order;
 	int val;
+	string name;
+	int inversion = -1;
+	int proc;
+	long long invocation;
 };
 
 std::vector<operation> parallelCase;
@@ -46,7 +50,10 @@ void readHistory(std::ifstream &f, std::vector<operation> &v)
 
 		struct operation op;
 		op.val = stoi(lineElems[5]);
-		op.timestamp = stoi(lineElems[9]);
+		op.timestamp = stoll(lineElems[9]);
+		op.name = lineElems[2];
+		op.proc = stoi(lineElems[3]);
+		op.invocation = stoll(lineElems[6]);
 		v.push_back(op);
 	}
 
@@ -63,15 +70,50 @@ void setOrder(std::vector<operation> &pCase, std::vector<operation> &iCase)
 		{
 			if (pCase[k].val == iCase[i].val)
 			{
-				pCase[i].order = k;
+				pCase[k].order = i;
 			}
 		}
 	}
 
-	/*for (int i = 0; i < iCase.size(); i++)
+	for (int i = 0; i < pCase.size(); i++)
 	{
-		std::cout << "Order: " << pCase[i].order << "\t Val: " << pCase[i].val << "\n";
-	}*/
+		int currentOpOrder = pCase[i].order;
+		int inversion = 0;
+
+		for (int k = 0; k < pCase.size(); k++)
+		{
+			if (k < i && pCase[k].order > currentOpOrder)
+				inversion++;
+			else if (k > i && pCase[k].order < currentOpOrder)
+				inversion++;
+		}
+
+		pCase[i].inversion = inversion;
+	}
+
+	std::ofstream ofs;
+	ofs.open("inversions.dat");
+
+	ofs << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tstart_order\tmethod2\titem2\tinvoke2\tfinish2\tfinish_order\tinversion\n";
+
+	if (ofs.is_open())
+	{
+		for (int i = 0; i < pCase.size(); i++)
+		{
+			for (int k = 0; k < iCase.size(); k++)
+			{
+				if (pCase[i].val == iCase[k].val)
+				{
+					ofs << "AMD\t" << "Treiber\t" << iCase[k].name << "\t" << iCase[k].proc << "\t" << "x\t" << iCase[k].val << "\t" << iCase[k].invocation << "\t" << "0\t" 
+					<< iCase[k].order << "\t" << pCase[i].name << "\t" << pCase[i].val << "\t" << pCase[i].invocation << "\t" << "0\t" << i << "\t" << pCase[i].inversion << "\n";
+
+					break;
+				}
+			}
+			
+			//ofs << pCase[i].order << "\t" << pCase[i].name << "\t" << pCase[i].val << "\t" << pCase[i].inversion << "\n";
+		}
+	}
 }
 
 void compareKeys(std::vector<operation> &pCase, std::vector<operation> &iCase)
