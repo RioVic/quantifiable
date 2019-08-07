@@ -71,6 +71,7 @@ void setOrder(std::vector<operation> &pCase, std::vector<operation> &iCase)
 			if (pCase[k].val == iCase[i].val)
 			{
 				pCase[k].order = i;
+				break;
 			}
 		}
 	}
@@ -84,8 +85,8 @@ void setOrder(std::vector<operation> &pCase, std::vector<operation> &iCase)
 		{
 			if (k < i && pCase[k].order > currentOpOrder)
 				inversion++;
-			else if (k > i && pCase[k].order < currentOpOrder)
-				inversion++;
+			else if (k >= i)
+				break;
 		}
 
 		pCase[i].inversion = inversion;
