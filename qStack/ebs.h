@@ -147,7 +147,7 @@ public:
         delete[] nodeAlloc;
     }
 
-	bool push(int tid, int i, T x, T &v, int &popOpn, int &popThread, long long timestamp) 
+	bool push(int tid, int i, T x, T &v, int &popOpn, int &popThread) 
 	{
 		Node *n = &nodeAlloc[tid][i];
 		n->val = x;
@@ -169,7 +169,7 @@ public:
 		return false;
 	}
 
-	bool pop(int tid, int i, T &x, long long &visibilityPoint) 
+	bool pop(int tid, int i, T &x) 
 	{
 		for (;;) {
 			Node *t = head.load();

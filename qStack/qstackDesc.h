@@ -67,13 +67,13 @@ public:
 		delete[] DescAlloc;
 	}
 
-	bool push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread, long long timestamp);
+	bool push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread);
 
-	bool pop(int tid, int opn, T &v, long long &visibilityPoint);
+	bool pop(int tid, int opn, T &v);
 
 	bool add(int tid, int opn, int index, Node *cur, Node *elem);
 
-	bool remove(int tid, int opn, T &v, int index, Node *cur, int &popOpn, int &popThread, long long &visibilityPoint);
+	bool remove(int tid, int opn, T &v, int index, Node *cur, int &popOpn, int &popThread);
 
 	void dumpNodes(std::ofstream &p);
 
@@ -94,13 +94,12 @@ private:
 };
 
 template<typename T>
-bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread, long long timestamp)
+bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThread)
 {
 	//Extract pre-allocated node
 	Node *elem = &NodeAlloc[tid][opn];
 	elem->value(ins);
 	elem->type(Push);
-	elem->timestamp(timestamp);
 	Desc *d = &DescAlloc[tid][opn];
 
 	int loop = 0;
@@ -166,9 +165,9 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 				{
 					std::cout << "Inverse Stack Disabled\n";
 					exit(EXIT_FAILURE);
-					long long vp;
+
 					//Remove this node instead of pushing
-					if (!this->remove(tid, opn, v, headIndex, cur, popOpn, popThread, vp))
+					if (!this->remove(tid, opn, v, headIndex, cur, popOpn, popThread))
 					{
 						//Remove desc and retry
 						cur->desc = nullptr;
@@ -201,7 +200,7 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 }
 
 template<typename T>
-bool QStackDesc<T>::pop(int tid, int opn, T& v, long long &visibilityPoint)
+bool QStackDesc<T>::pop(int tid, int opn, T& v)
 {
 	int loop = 0;
 	Desc *d = &DescAlloc[tid][opn];
@@ -286,7 +285,7 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v, long long &visibilityPoint)
 					int popThread;
 
 					//Attempt to remove as normal
-					if (!this->remove(tid, opn, v, headIndex, cur, pushOpn, popThread, visibilityPoint))
+					if (!this->remove(tid, opn, v, headIndex, cur, pushOpn, popThread))
 					{
 						cur->desc = nullptr;
 						threadIndex[tid] = (headIndex + 1) % this->num_threads;
@@ -361,7 +360,7 @@ bool QStackDesc<T>::add(int tid, int opn, int headIndex, Node *cur, Node *elem)
 
 //Removes an arbitrary operation from the stack
 template<typename T>
-bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int &popOpn, int &popThread, long long &visibilityPoint)
+bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int &popOpn, int &popThread)
 {
 	//Check that the pred array is empty, and that a safe pop can occur
 	if (cur->hasNoPreds() && cur->notInTop(top, num_threads, headIndex))
@@ -370,7 +369,6 @@ bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int
 		cur->next()->removePred(cur);
 		//topDepths[headIndex] = cur->depth();
 		top[headIndex] = cur->next();
-		visibilityPoint = rdtsc();
 		return true;
 	}
 	else
@@ -453,9 +451,6 @@ public:
 
 	void thread(int tid) { _thread = tid; };
 	int thread() { return _thread; };
-
-	void timestamp(long long t) { _timestamp = t; };
-	long long timestamp() { return _timestamp; };
 
 	int depth(int d) { _depth = d; };
 	int depth() { return _depth; };
@@ -576,7 +571,6 @@ private:
 	Operation _type;
 	int _opn;
 	int _thread;
-	long long _timestamp = 1;
 	int _depth = 0;
 	
 };

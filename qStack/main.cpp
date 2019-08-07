@@ -15,8 +15,8 @@
 struct __attribute__((aligned(64))) timestamp
 {
 	long long invoked;
-	long long returned;
-	long long vp; //Visibility Point
+	long long returned = -1;
+	long long vp = -1; //Visibility Point
 	std::string type;
 	int val;
 	long key;
@@ -36,9 +36,8 @@ int NUM_OPS;
 int RATIO_PUSH;
 char* MODE;
 
-void logOp(struct timestamp &ts, long long vp, std::string type, int val)
+void logOp(struct timestamp &ts, std::string type, int val)
 {
-	ts.vp = vp;
 	ts.type = type;
 	ts.val = val;
 }
@@ -96,23 +95,23 @@ void work(int thread_id, int num_ops, int push_ratio, T *s, int num_threads)
 
 		if ((r % 100) < push_ratio)
 		{
-			result = s->push(thread_id, i, insert, val, popOpn, popThread, invoked);
+			result = s->push(thread_id, i, insert, val, popOpn, popThread);
 
 			//"Push acts as Pop case"
 			if (val != -11)
-				logOp(ts[popThread][popOpn], -1, "Pop", val);
+				logOp(ts[popThread][popOpn], "Pop", val);
 			else
-				logOp(ts[thread_id][i], -1, "Push", insert);
+				logOp(ts[thread_id][i], "Push", insert);
 
 			insert += num_threads;
 		}
 		else
 		{
-			result = s->pop(thread_id, i, val, visibilityPoint);
+			result = s->pop(thread_id, i, val);
 
 			//Normal case
 			if (val != -11)
-				logOp(ts[thread_id][i], visibilityPoint, "Pop", val);
+				logOp(ts[thread_id][i], "Pop", val);
 
 			//If we don't get a value back here, it means the pop is pending, and that we must get the return time when a push() operation satisfies it	
 		}
@@ -140,7 +139,7 @@ void exportHistory(int num_ops, int num_threads, T *s)
 		int val = -11;
 
 		invoked = rdtsc();
-		s->pop(0, op, val, visibilityPoint);
+		s->pop(0, op, val);
 		returned = rdtsc();
 
 		//Sucessful pop
@@ -222,22 +221,22 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 		invoked = rdtsc();
 		if (history[i].type == "Push")
 		{
-			result = s->push(0, i, history[i].val, val, popOpn, popThread, invoked);
+			result = s->push(0, i, history[i].val, val, popOpn, popThread);
 
 			//Push acts as pop case
 			if (val != -11)
-				logOp(idealCaseTimestamps[popOpn], -1, "Pop", val);
+				logOp(idealCaseTimestamps[popOpn], "Pop", val);
 			else //Normal case
-				logOp(idealCaseTimestamps[i], -1, "Push", history[i].val);
+				logOp(idealCaseTimestamps[i], "Push", history[i].val);
 		}
 		else if (history[i].type == "Pop")
 		{
 			long long vp;
-			result = s->pop(0, i, val, vp);
+			result = s->pop(0, i, val);
 
 			//Normal case
 			if (val != -11)
-				logOp(idealCaseTimestamps[i], vp, "Pop", val);
+				logOp(idealCaseTimestamps[i], "Pop", val);
 		}
 		else
 		{

@@ -53,7 +53,7 @@ class Treiber_S {
             delete[] nodeArray;
         }
 
-        bool push(int tid, int i, T item, T &v, int &popOpn, int &popThread, long long timestamp) {
+        bool push(int tid, int i, T item, T &v, int &popOpn, int &popThread) {
             Node *n = &nodeArray[tid][i];
             n->val = item; 
             do {
@@ -62,7 +62,7 @@ class Treiber_S {
             return true;
         }
 
-        bool pop(int tid, int opn, T &v, long long &visibilityPoint) {
+        bool pop(int tid, int opn, T &v) {
             Node *t;
             do {
                 t = head.load();
@@ -70,7 +70,6 @@ class Treiber_S {
                 if (!(t->next))
                     return false;
             } while (!head.compare_exchange_weak(t, t->next));
-            visibilityPoint = rdtsc();
             v = t->val;
             return true;
         }
