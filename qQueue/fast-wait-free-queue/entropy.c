@@ -1,27 +1,30 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include "delay.h"
 #include "queue.h"
+#include "rdtsc.h"
 
 #ifndef LOGN_OPS
 #define LOGN_OPS 2
 #endif
 
+struct __attribute__((aligned(64))) timestamp
+{
+  long long invoked;
+  long long returned;
+  long long vp; //Visibility Point
+  char type[10];
+  int val;
+  long key;
+};
+
 static long nops;
 static queue_t * q;
 static handle_t ** hds;
 
-long long **invocations;
-long long **returns;
-int **enqueues;
-int **dequeues;
-
-inline unsigned long rdtsc() {
-  volatile unsigned long tl;
-  asm __volatile__("lfence\nrdtsc" : "=a" (tl): : "%edx"); //lfence is used to wait for prior instruction (optional)
-  return tl;
-}
+struct timestamp **ts;
 
 void init(int nprocs, int logn) {
 
@@ -35,24 +38,12 @@ void init(int nprocs, int logn) {
     nops *= 10;
   }
 
-  //Init invocations and returns
-  invocations = malloc(sizeof(long long *) * nprocs);
-  returns = malloc(sizeof(long long *) * nprocs);
-  dequeues = malloc(sizeof(int *) * nprocs);
-  enqueues = malloc(sizeof(int *) * nprocs);
+  //Init timestamp array
+  ts = malloc(sizeof(long long *) * nprocs);
 
   for (int k = 0; k < nprocs; k++)
   {
-    invocations[k] = malloc(sizeof(long long) * nops*2);
-    returns[k] = malloc(sizeof(long long) * nops*2);
-    dequeues[k] = malloc(sizeof(int) * nops*2);
-    enqueues[k] = malloc(sizeof(int) * nops*2);
-
-    for (int j = 0; j < nops*2; j++)
-    {
-      dequeues[k][j] = -22;
-      enqueues[k][j] = -22;
-    }
+    ts[k] = malloc(sizeof(long long) * nops/nprocs);
   }
 
   printf("  Number of operations: %ld\n", nops);
@@ -73,19 +64,24 @@ void exportHistory(int nprocs)
   FILE *fp;
 
   fp = fopen("./dequeueOrder", "w");
-  fprintf(fp, "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\n");
-  for (int i = 0; i < nops*2; i++)
+  fprintf(fp, "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tvisibilityPoint\tprimaryStamp\n");
+  
+  struct timestamp *operation;
+
+  for (int i = 0; i < nprocs; i++)
   {
-    for (int k = 0; k < nprocs; k++)
+    for (int k = 0; k < nops/nprocs; k++)
     {
-      if (dequeues[k][i] == -22 && enqueues[k][i] == -22)
-        continue;
+      operation = ts[i];
 
-      unsigned long invoked = invocations[k][i];
-      unsigned long returned = returns[k][i];
-      int val = (dequeues[k][i] == -22) ? enqueues[k][i] : dequeues[k][i];
+      if (operation->invoked == -1)
+      {
+        printf("Error, blank timestamp found\n");
+        exit(EXIT_FAILURE);
+      }
 
-      fprintf(fp, "AMD \t QQueue \t %s \t %d \t x \t %d \t %lu \t %lu \n", (dequeues[k][i] == -22 ? "Push" : "Pop"), k, val, invoked, returned);
+      fprintf(fp, "AMD \t ALG \t %s \t %d \t x \t %d \t %lli \t %lli \t %lli \n", 
+        operation->type, i, operation->val, operation->invoked, operation->vp, (strcmp(operation->type, "Enqueue") ? operation->invoked : operation->vp));
     }
   }
   fclose(fp);
@@ -105,18 +101,19 @@ void * benchmark(int id, int nprocs) {
     if (i%2 == 0)
     {
       enqueue(q, th, val);
-      enqueues[id][i] = (int)val;
+      strcpy(ts[id][i].type, "Enqueue");
+      ts[id][i].val = (intptr_t)val;
       val += nprocs;      
     }
     else
     {
       ret = dequeue(q, th);
-      dequeues[id][i] = (int)ret;
+      strcpy(ts[id][i].type, "Dequeue");
+      ts[id][i].val = (intptr_t)ret;
     }
-    unsigned long returned = rdtsc();
-
-    invocations[id][i] = invoked;
-    returns[id][i] = returned;
+    
+    ts[id][i].key = (id) + (nprocs *i);
+    ts[id][i].invoked = invoked;
 
     delay_exec(&state);
   }
