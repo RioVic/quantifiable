@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <string.h>
+#include <math.h>
 #include "bits.h"
 #include "cpumap.h"
 #include "benchmark.h"
@@ -27,11 +28,16 @@
 #define COV_THRESHOLD 0.02
 #endif
 
+struct timestamp **ts;
+struct timestamp *dataIn;
+
 static pthread_barrier_t barrier;
 static double times[MAX_ITERS];
 static double means[MAX_ITERS];
 static double covs[MAX_ITERS];
 static volatile int target;
+
+char benchName[2048];
 
 static size_t elapsed_time(size_t us)
 {
@@ -107,6 +113,86 @@ static void report(int id, int nprocs, int i, long us)
   pthread_barrier_wait(&barrier);
 }
 
+struct timestamp *readFile(int numOps)
+{
+  char fileName[100];
+  strcpy(fileName, "");
+  strcat(fileName, benchName+2);
+  strcat(fileName, "OrderParallel.dat");
+
+  FILE *fp = fopen(fileName, "r");
+  struct timestamp *dataIn;
+  dataIn = malloc(sizeof(struct timestamp) * (numOps));
+
+  char buff[2048];
+  char line[8][255];
+  char *word;
+  int lineIndex = 0, timestampIndex = 0;;
+
+  //Skip first line
+  fgets(buff, 2048, (FILE*)fp);
+
+  //Read a line
+  while (fgets(buff, 2048, (FILE*)fp) != NULL)
+  {
+    lineIndex = 0;
+
+    //Seperate the buffer by individual words
+    word = strtok(buff, "\t");
+
+    //Store each word of the line at seperate index of array
+    while (word != NULL)
+    {
+      strcpy(line[lineIndex++], word);
+      word = strtok(NULL, "\t");
+    }
+
+    //Copy over the values we need from the line to our dataIn
+    strcpy(dataIn[timestampIndex].type, line[2]);
+    dataIn[timestampIndex].val = atoi(line[5]);
+    dataIn[timestampIndex].invoked = atoll(line[6]);
+    dataIn[timestampIndex].key = atol(line[7]);
+    timestampIndex++;
+  }
+
+  return dataIn;
+}
+
+void exportHistory(int nprocs, int nops)
+{
+  FILE *fp;
+  char fileName[100];
+  strcpy(fileName, "");
+  strcat(fileName, benchName+2);
+  if (nprocs > 1)
+    strcat(fileName, "OrderParallel.dat");
+  else if (nprocs == 1)
+    strcat(fileName, "OrderIdeal.dat");
+
+  fp = fopen(fileName, "w");
+  fprintf(fp, "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tkey\n");
+  
+  struct timestamp *operation;
+
+  for (int i = 0; i < nprocs; i++)
+  {
+    for (int k = 0; k < nops/nprocs; k++)
+    {
+      operation = &ts[i][k];
+
+      if (operation->invoked == -1)
+      {
+        printf("Error, blank timestamp found\n");
+        exit(EXIT_FAILURE);
+      }
+
+      fprintf(fp, "AMD\tALG\t%s\t%d\tx\t%d\t%lli\t%d\n", 
+        operation->type, i, operation->val, operation->invoked, operation->key);
+    }
+  }
+  fclose(fp);
+}
+
 static void * thread(void * bits)
 {
   int id = bits_hi(bits);
@@ -125,12 +211,21 @@ static void * thread(void * bits)
   int i;
   void * result = NULL;
 
-  for (i = 0; i < MAX_ITERS && target == 0; ++i) {
+  if (nprocs == 1)
+  {
+    result = benchmarkIdeal(id, nprocs, ts, dataIn);
+    pthread_barrier_wait(&barrier);
+  }
+  else
+  {
+    //Execute parallel entropy test
+    for (i = 0; i < MAX_ITERS && target == 0; ++i) {
     long us = elapsed_time(0);
-    result = benchmark(id, nprocs);
+    result = benchmark(id, nprocs, ts);
     pthread_barrier_wait(&barrier);
     us = elapsed_time(us);
     report(id, nprocs, i, us);
+   }
   }
 
   thread_exit(id, nprocs);
@@ -140,7 +235,7 @@ static void * thread(void * bits)
 int main(int argc, const char *argv[])
 {
   int nprocs = 0;
-  int n = 0;
+  int n = 2;
 
   /** The first argument is nprocs. */
   if (argc > 1) {
@@ -161,6 +256,14 @@ int main(int argc, const char *argv[])
     pthread_setconcurrency(nprocs);
   }
 
+  strcpy(benchName, argv[0]);
+
+  if (nprocs == 1)
+  {
+    /** Set entropy ideal case */
+    dataIn = readFile(pow(10,n));
+  }
+
   /**
    * The second argument is input size n.
    */
@@ -175,6 +278,14 @@ int main(int argc, const char *argv[])
 
   init(nprocs, n);
 
+  //Init timestamp array
+  ts = malloc(sizeof(struct timestamp *) * nprocs);
+
+  for (int k = 0; k < nprocs; k++)
+  {
+    ts[k] = malloc(sizeof(struct timestamp) * pow(10,n));
+  }
+
   pthread_t ths[nprocs];
   void * res[nprocs];
 
@@ -188,6 +299,11 @@ int main(int argc, const char *argv[])
   for (i = 1; i < nprocs; i++) {
     pthread_join(ths[i], &res[i]);
   }
+
+  exportHistory(nprocs, pow(10,n));
+
+  if (nprocs == 1)
+    return;
 
   if (target == 0) {
     target = NUM_ITERS - 1;

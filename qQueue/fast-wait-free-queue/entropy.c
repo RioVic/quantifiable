@@ -4,27 +4,25 @@
 #include <string.h>
 #include "delay.h"
 #include "queue.h"
-#include "rdtsc.h"
+
+#ifndef TIMESTAMP
+#define TIMESTAMP
+#include "timestamp.h"
+#endif
 
 #ifndef LOGN_OPS
 #define LOGN_OPS 2
 #endif
 
-struct __attribute__((aligned(64))) timestamp
-{
-  long long invoked;
-  long long returned;
-  long long vp; //Visibility Point
-  char type[10];
-  int val;
-  long key;
-};
-
 static long nops;
 static queue_t * q;
 static handle_t ** hds;
 
-struct timestamp **ts;
+long long rdtsc() {
+  volatile long long tl;
+  asm __volatile__("lfence\nrdtsc" : "=a" (tl): : "%edx"); //lfence is used to wait for prior instruction (optional)
+  return tl;
+}
 
 void init(int nprocs, int logn) {
 
@@ -36,14 +34,6 @@ void init(int nprocs, int logn) {
   int i;
   for (i = 0; i < logn; ++i) {
     nops *= 10;
-  }
-
-  //Init timestamp array
-  ts = malloc(sizeof(long long *) * nprocs);
-
-  for (int k = 0; k < nprocs; k++)
-  {
-    ts[k] = malloc(sizeof(long long) * nops/nprocs);
   }
 
   printf("  Number of operations: %ld\n", nops);
@@ -59,35 +49,7 @@ void thread_init(int id, int nprocs) {
   queue_register(q, hds[id], id);
 }
 
-void exportHistory(int nprocs)
-{
-  FILE *fp;
-
-  fp = fopen("./dequeueOrder", "w");
-  fprintf(fp, "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tvisibilityPoint\tprimaryStamp\n");
-  
-  struct timestamp *operation;
-
-  for (int i = 0; i < nprocs; i++)
-  {
-    for (int k = 0; k < nops/nprocs; k++)
-    {
-      operation = ts[i];
-
-      if (operation->invoked == -1)
-      {
-        printf("Error, blank timestamp found\n");
-        exit(EXIT_FAILURE);
-      }
-
-      fprintf(fp, "AMD \t ALG \t %s \t %d \t x \t %d \t %lli \t %lli \t %lli \n", 
-        operation->type, i, operation->val, operation->invoked, operation->vp, (strcmp(operation->type, "Enqueue") ? operation->invoked : operation->vp));
-    }
-  }
-  fclose(fp);
-}
-
-void * benchmark(int id, int nprocs) {
+void * benchmark(int id, int nprocs, struct timestamp **ts) {
   void * val = (void *) (intptr_t) (id + 1);
   void * ret;
   handle_t * th = hds[id];
@@ -118,7 +80,42 @@ void * benchmark(int id, int nprocs) {
     delay_exec(&state);
   }
 
-  exportHistory(nprocs);
+  return val;
+}
+
+void * benchmarkIdeal(int id, int nprocs, struct timestamp **ts, struct timestamp *dataIn) {
+  void * val = (void *) (intptr_t) (id + 1);
+  void * ret;
+  handle_t * th = hds[id];
+
+  delay_t state;
+  delay_init(&state, id);
+
+  int i;
+  for (i = 0; i < nops / nprocs; ++i) {
+    unsigned long invoked = rdtsc();
+    if (strcmp(dataIn[i].type, "Enqueue") == 0)
+    {
+      enqueue(q, th, dataIn[i].val);
+      strcpy(ts[id][i].type, "Enqueue");
+      ts[id][i].val = dataIn[i].val;     
+    }
+    else if (strcmp(dataIn[i].type, "Dequeue") == 0)
+    {
+      ret = dequeue(q, th);
+      strcpy(ts[id][i].type, "Dequeue");
+      ts[id][i].val = (intptr_t)ret;
+    }
+    else
+    {
+      printf("Error, type unrecognized\n");
+    }
+    
+    ts[id][i].key = dataIn[i].key;
+    ts[id][i].invoked = invoked;
+
+    delay_exec(&state);
+  }
 
   return val;
 }
