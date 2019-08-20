@@ -60,7 +60,7 @@ void readHistory(std::ifstream &f, std::vector<operation> &v)
 	std::sort(v.begin(), v.end(), compareOperation);
 }
 
-void setOrder(std::vector<operation> &pCase, std::vector<operation> &iCase)
+void setOrder(std::vector<operation> &pCase, std::vector<operation> &iCase, string filename)
 {
 	for (int i = 0; i < iCase.size(); i++)
 	{
@@ -93,7 +93,7 @@ void setOrder(std::vector<operation> &pCase, std::vector<operation> &iCase)
 	}
 
 	std::ofstream ofs;
-	ofs.open("inversions.dat");
+	ofs.open(filename);
 
 	ofs << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tstart_order\tmethod2\titem2\tinvoke2\tfinish2\tfinish_order\tinversion\n";
 
@@ -141,11 +141,16 @@ int main(int argc, char** argv)
 		exit(EXIT_FAILURE);
 	}
 
+	string filename = argv[1];
+	size_t pos = filename.find("_parallel.dat");
+	filename.erase(pos, 13);
+	filename = filename + "_inversions.dat";
+
 	readHistory(f1, parallelCase);
 	readHistory(f2, idealCase);
 
 	f1.close();
 	f2.close();
 
-	setOrder(parallelCase, idealCase);
+	setOrder(parallelCase, idealCase, filename);
 }
