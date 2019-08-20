@@ -1,7 +1,7 @@
 TESTS = qqueue wfqueue wfqueue0 lcrq ccqueue msqueue faa delay
 
 CC = gcc
-CFLAGS = -g -Wall -O3 -pthread -D_GNU_SOURCE
+CFLAGS = -g -Wall -pthread -D_GNU_SOURCE -Wformat-security
 LDLIBS = -lpthread -lm
 
 ifeq (${VERIFY}, 1)
@@ -43,8 +43,8 @@ faa: CFLAGS += -DFAAQ
 delay: CFLAGS += -DDELAY
 
 $(TESTS): harness.o
-ifeq (${HALFHALF}, 1)
-$(TESTS): halfhalf.o
+ifeq (${IDEAL}, 1)
+$(TESTS): entropyIdeal.o
 else
 $(TESTS): entropy.o
 endif
