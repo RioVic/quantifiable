@@ -5,10 +5,11 @@
 #include <stdlib.h>
 #include <vector>
 #include <algorithm>
+#include <thread>
 
 using namespace std;
 
-struct operation
+struct __attribute__((aligned(64))) operation 
 {
 	long key;
 	long long timestamp;
@@ -17,11 +18,14 @@ struct operation
 	string name;
 	int inversion = -1;
 	int proc;
-	long long invocation;
 };
 
-std::vector<operation> parallelCase;
-std::vector<operation> idealCase;
+std::vector<operation> pCase;
+std::vector<operation> iCase;
+int NUM_THREADS;
+string benchName;
+
+pthread_barrier_t workBarrier;
 
 bool compareOperation(operation t1, operation t2)
 {
@@ -33,6 +37,7 @@ void readHistory(std::ifstream &f, std::vector<operation> &v)
 {
 	string line;
 	getline(f, line); //Skip first line
+	int i = 0;
 
 	while (getline(f, line))
 	{
@@ -48,23 +53,29 @@ void readHistory(std::ifstream &f, std::vector<operation> &v)
 			continue;
 		}
 
+		if (benchName.empty())
+			benchName = lineElems[1];
+
 		struct operation op;
 		op.val = stoi(lineElems[5]);
-		op.timestamp = stoll(lineElems[9]);
+		op.timestamp = stoll(lineElems[6]);
 		op.name = lineElems[2];
 		op.proc = stoi(lineElems[3]);
-		op.invocation = stoll(lineElems[6]);
 		v.push_back(op);
+		i++;
 	}
 
 	std::sort(v.begin(), v.end(), compareOperation);
 }
 
-void setOrder(std::vector<operation> &pCase, std::vector<operation> &iCase, string filename)
+void setOrder(string filename, int id)
 {
-	for (int i = 0; i < iCase.size(); i++)
+	for (int i = id; i < iCase.size(); i+=NUM_THREADS)
 	{
 		iCase[i].order = i;
+
+		if (i % 25000 == 0)
+			std::cout << "Logging item number: " << i << " ...\n";
 
 		for (int k = 0; k < pCase.size(); k++)
 		{
@@ -76,10 +87,15 @@ void setOrder(std::vector<operation> &pCase, std::vector<operation> &iCase, stri
 		}
 	}
 
-	for (int i = 0; i < pCase.size(); i++)
+	pthread_barrier_wait(&workBarrier);
+
+	for (int i = id; i < pCase.size(); i+=NUM_THREADS)
 	{
 		int currentOpOrder = pCase[i].order;
 		int inversion = 0;
+
+		if (i % 25000 == 0)
+			std::cout << "Processing item number: " << i << " ...\n";
 
 		for (int k = 0; k < pCase.size(); k++)
 		{
@@ -91,6 +107,11 @@ void setOrder(std::vector<operation> &pCase, std::vector<operation> &iCase, stri
 
 		pCase[i].inversion = inversion;
 	}
+
+	pthread_barrier_wait(&workBarrier);
+
+	if (id != 0)
+		return;
 
 	std::ofstream ofs;
 	ofs.open(filename);
@@ -105,14 +126,15 @@ void setOrder(std::vector<operation> &pCase, std::vector<operation> &iCase, stri
 			{
 				if (pCase[i].val == iCase[k].val)
 				{
-					ofs << "AMD\t" << "Treiber\t" << iCase[k].name << "\t" << iCase[k].proc << "\t" << "x\t" << iCase[k].val << "\t" << iCase[k].invocation << "\t" << "0\t" 
-					<< iCase[k].order << "\t" << pCase[i].name << "\t" << pCase[i].val << "\t" << pCase[i].invocation << "\t" << "0\t" << i << "\t" << pCase[i].inversion << "\n";
+					ofs << "AMD\t" << benchName << "\t" << iCase[k].name << "\t" << iCase[k].proc << "\t" << "x\t" << iCase[k].val << "\t" << iCase[k].timestamp << "\t" << "0\t" 
+					<< iCase[k].order << "\t" << pCase[i].name << "\t" << pCase[i].val << "\t" << pCase[i].timestamp << "\t" << "0\t" << i << "\t" << pCase[i].inversion << "\n";
 
 					break;
 				}
 			}
 			
 			//ofs << pCase[i].order << "\t" << pCase[i].name << "\t" << pCase[i].val << "\t" << pCase[i].inversion << "\n";
+			//break;
 		}
 	}
 }
@@ -124,13 +146,17 @@ void compareKeys(std::vector<operation> &pCase, std::vector<operation> &iCase)
 
 int main(int argc, char** argv)
 {
-	if (argc != 3)
+	if (argc != 4)
 	{
-		std::cout << "Please use: " << argv[0] << " <Entropy Data File 1 (Parallel Case)> <Entropy Data File 2 (Ideal Case)>\n";
+		std::cout << "Please use: " << argv[0] << " <Entropy Data File 1 (Parallel Case)> <Entropy Data File 2 (Ideal Case)> <Number Of Threads>\n";
+		return -1;
 	}
 
 	std::ifstream f1;
 	std::ifstream f2;
+	NUM_THREADS = atoi(argv[3]);
+
+	pthread_barrier_init(&workBarrier,NULL,NUM_THREADS);
 
 	f1.open(argv[1]);
 	f2.open(argv[2]);
@@ -146,11 +172,17 @@ int main(int argc, char** argv)
 	filename.erase(pos, 13);
 	filename = filename + "_inversions.dat";
 
-	readHistory(f1, parallelCase);
-	readHistory(f2, idealCase);
+	readHistory(f1, pCase);
+	readHistory(f2, iCase);
 
 	f1.close();
 	f2.close();
 
-	setOrder(parallelCase, idealCase, filename);
+	std::vector<std::thread> threads;
+
+	for (int j = 0; j < NUM_THREADS; j++)
+			threads.push_back(std::thread(&setOrder, filename, j));
+
+	for (std::thread &t : threads)
+			t.join();
 }
