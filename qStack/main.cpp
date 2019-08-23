@@ -115,8 +115,8 @@ void work(int thread_id, T *s, int num_threads)
 			//Log invocation
 			invoked = rdtsc();
 
-			if (k == THREAD_INTERVAL)
-				pthread_barrier_wait(&workBarrier);
+			//if (k == THREAD_INTERVAL)
+				//pthread_barrier_wait(&workBarrier);
 
 			if (k < THREAD_INTERVAL)
 			{
@@ -270,7 +270,7 @@ int main(int argc, char** argv)
 {
 	if (argc < 5 || strcmp(argv[1],"--help") == 0)
 	{
-		std::cout << "Please use: " << argv[0] << " <number of threads> <size of operation intervals> <number of intervals> <\"QStack\" | \"QStackDesc\" | \"Treiber\" | \"EBS\"> \n";
+		std::cout << "Please use: " << argv[0] << " <number of threads> <size of operation intervals> <number of intervals> <\"QStackDesc\" | \"Treiber\" | \"EBS\"> \n";
 		return -1;
 	}
 
