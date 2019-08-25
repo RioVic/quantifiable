@@ -20,5 +20,10 @@ done
 
 for i in {1..32}
 do
+	$Program i 100 1000 $Stack
+done
+
+for i in {1..32}
+do
 	$Program i 10 10000 $Stack
 done
