@@ -237,8 +237,8 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 			}
 		}
 
-		if (highest - lowest > MAX_DEPTH_DISPARITY)
-			std::cout << "Disparity of " << highest - lowest << " found \n";
+		//if (highest - lowest > MAX_DEPTH_DISPARITY)
+			//std::cout << "Disparity of " << highest - lowest << " found \n";
 		//End of Depth based pop
 		
 		Node *cur = top[headIndex].load();
@@ -266,7 +266,7 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 
 				if (cur->isSentinel() || cur->type() == Pop)
 				{
-					std::cout << "Inverse Stack Disabled\n";
+					std::cout << "Inverse Stack Disabled: " << tid << " " << opn << "\n";
 					exit(EXIT_FAILURE);
 
 					Node *elem = &NodeAlloc[tid][opn];
