@@ -22,6 +22,7 @@
  */
 
 #include "intset.h"
+#include "rdtsc.h"
 
 /* Entropy Declarations */
 
@@ -38,8 +39,10 @@ struct timestamp **parallel_case;
 struct timestamp *ideal_case;
 
 long num_operations;
+long num_remove_operation;
 long num_add_operations;
 long num_contain_operations;
+long num_sets;
 
 /* End Entropy Declarations */
 
@@ -136,14 +139,25 @@ typedef struct thread_data {
 } thread_data_t;
 
 
+//TODO: Rewrite test function
 void *test(void *data) {
   int unext, last = -1; 
   val_t val = 0;
 	
+  long long invoked;
+
   thread_data_t *d = (thread_data_t *)data;
 	
   /* Wait on barrier */
   barrier_cross(d->barrier);
+
+  for (int i = 0; i < SETS; i++)
+  {
+    for (int k = 0; k < OPS; k++)
+    {
+
+    }
+  }
 	
   /* Is the first op an update? */
   unext = (rand_range_re(&d->seed, 100) - 1 < d->update);
@@ -154,12 +168,12 @@ void *test(void *data) {
 				
       if (last < 0) { // add
 					
-	val = rand_range_re(&d->seed, d->range);
-	if (set_add_l(d->set, val, TRANSACTIONAL)) {
-	  d->nb_added++;
-	  last = val;
-	} 				
-	d->nb_add++;
+        val = rand_range_re(&d->seed, d->range);
+          if (set_add_l(d->set, val, TRANSACTIONAL)) {
+            d->nb_added++;
+            last = val;
+          } 				
+      	d->nb_add++;
 					
       } else { // remove
 					
@@ -266,7 +280,7 @@ int main(int argc, char **argv)
 	
   while(1) {
     i = 0;
-    c = getopt_long(argc, argv, "hAf:d:i:t:r:S:u:x:o:a:c", long_options, &i); //Entropy Arg (o:a:c)
+    c = getopt_long(argc, argv, "hAf:d:i:t:r:S:u:x:o:a:c:s", long_options, &i); //Entropy Arg (o:a:c)
 		
     if(c == -1)
       break;
@@ -335,13 +349,15 @@ int main(int argc, char **argv)
         update = atoi(optarg);
         break;
       case 'o':
-        num_operations = atoi(optarg); //Entropy Arg
+        num_remove_operations = atoi(optarg); //Entropy Arg
         break;
       case 'a':
         num_add_operations = atoi(optarg); //Entropy Arg
         break;
       case 'c':
         num_contain_operations = atoi(optarg); //Entropy Arg
+      case 's':
+        num_sets = atoi(optarg); //Entropy Arg
         break;
       case 'x':
         printf("The parameter x is not valid for this benchmark.\n");
@@ -360,12 +376,13 @@ int main(int argc, char **argv)
     }
   }
 	
+  num_operations = num_add_operations + num_remove_operations + num_contain_operations; //Entropy num_operations
+
   assert(duration >= 0);
   assert(initial >= 0);
   assert(nb_threads > 0);
   assert(range > 0 && range >= initial);
   assert(update >= 0 && update <= 100);
-  assert(num_operations > 0 && (num_add_operations + num_contain_operations) > num_operations); // Entropy Assert
 	
   printf("Set type     : lazy linked list\n");
   printf("Length       : %d\n", duration);
@@ -377,9 +394,10 @@ int main(int argc, char **argv)
   printf("Lock alg     : %d\n", unit_tx);
   printf("Alternate    : %d\n", alternate);
   printf("Effective    : %d\n", effective);
-  printf("Num Ops    : %d\n", num_operations); //Entropy Print
+  printf("Num Remove   : %d\n", num_remove_operations); //Entropy Print
   printf("Num Adds     : %d\n", num_add_operations); //Entropy Print
   printf("Num Contains : %d\n", num_contain_operations); //Entropy Print
+  printf("Num Sets:    : %d\n", num_sets); //Entropy Print
   printf("Type sizes   : int=%d/long=%d/ptr=%d/word=%d\n",
 	 (int)sizeof(int),
 	 (int)sizeof(long),
@@ -390,12 +408,12 @@ int main(int argc, char **argv)
   timeout.tv_nsec = (duration % 1000) * 1000000;
 
   /* Entropy Allocation */
-  parallelCase = malloc(nb_threads * sizeof(struct timestamp *));
+  parallel_case = malloc(nb_threads * sizeof(struct timestamp *));
   ideal_case = malloc(num_operations * sizeof(struct timestamp));
 
   for (int i = 0; i < nb_threads; i++)
   {
-    parallelCase[i] = malloc(num_operations * sizeof(struct timestamp));
+    parallel_case[i] = malloc(num_operations * sizeof(struct timestamp));
   }
   /* End Entropy Allocation */
 	
