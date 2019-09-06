@@ -22,27 +22,29 @@
  */
 
 #include "intset.h"
-#include "rdtsc.h"
+// #include "rdtsc.h"
 
 /* Entropy Declarations */
 
 struct __attribute__((aligned(64))) timestamp
 {
   long long invoked;
-  std::string type;
+  int type;
   int val;
   long key;
-  int thread_id;
+  int thrd_id;
 };
+
+char OPS[][10] = {"Add", "Remove", "Contain"};
 
 struct timestamp **parallel_case;
 struct timestamp *ideal_case;
 
-long num_operations;
-long num_remove_operation;
-long num_add_operations;
-long num_contain_operations;
-long num_sets;
+int num_operations;
+int num_remove_operations = 100;
+int num_add_operations = 100;
+int num_contain_operations = 100;
+int num_sets = 1;
 
 /* End Entropy Declarations */
 
@@ -115,6 +117,7 @@ long rand_range_re(unsigned int *seed, long r);
 typedef struct thread_data {
   val_t first;
   long range;
+  int id;
   int update;
   int unit_tx;
   int alternate;
@@ -140,97 +143,139 @@ typedef struct thread_data {
 
 
 //TODO: Rewrite test function
-void *test(void *data) {
+void *test(void *data)
+{
   int unext, last = -1; 
   val_t val = 0;
 	
-  long long invoked;
+  // Local variables that we can change and not worry about changing the OG variable
+  int add = num_add_operations;
+  int rem = num_remove_operations;
+  int con = num_contain_operations;
 
+  // Contains all the thread info
   thread_data_t *d = (thread_data_t *)data;
 	
   /* Wait on barrier */
   barrier_cross(d->barrier);
 
-  for (int i = 0; i < SETS; i++)
+  // For every set
+  int i;
+  for (i = 0; i < num_sets; i++)
   {
-    for (int k = 0; k < OPS; k++)
+    // Keep doing ops as long as any of the operations are greater than 0
+    while (add > 0 || rem > 0 || con > 0)
     {
+      // Generate a random number, it'll decide the which operation we'll do
+      int r = rand();
+      auto invoked = time(0);
 
+      // We'll be adding, removing, and searching in random order. We'll mod by three
+      if (r % 3 == 0 && add > 0)
+      {
+        val = rand_range_re(&d->seed, d->range);
+        if (set_add_l(d->set, val, TRANSACTIONAL)) {
+          d->nb_added++;
+          last = val;
+        }
+        
+        add--;
+        d->nb_add++;
+      }
+
+      // Deleting items from the list
+      else if (r % 3 == 1 && rem > 0)
+      {
+        if (d->alternate)  // alternate mode
+        {
+          if (set_remove_l(d->set, last, TRANSACTIONAL))
+          {
+            d->nb_removed++;
+          }
+          last = -1;
+        }
+        else
+        {     
+          val = rand_range_re(&d->seed, d->range);
+          if (set_remove_l(d->set, val, TRANSACTIONAL))
+          {
+            d->nb_removed++;
+            last = -1;
+          } 
+        }
+
+        rem--;
+        d->nb_remove++;
+      }
+
+      // Contains operation
+      else if (r % 3 == 2 && con > 0)
+      {
+        if (d->alternate)
+        {
+          if (d->update == 0)
+          {
+            if (last < 0)
+            {
+              val = d->first;
+              last = val;
+            }
+            else
+            {
+              val = rand_range_re(&d->seed, d->range);
+              last = -1;
+            }
+          }
+          else
+          {
+            if (last < 0)
+            {
+              val = rand_range_re(&d->seed, d->range);
+              //last = val;
+            }
+            else
+            {
+              val = last;
+            }
+          }
+        }
+        else
+        {
+          val = rand_range_re(&d->seed, d->range);
+        }
+          
+        if (set_contains_l(d->set, val, TRANSACTIONAL))
+        {
+          d->nb_found++;
+          printf("AHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH\n");
+        }
+
+        con--;
+        d->nb_contains++;			
+      }
+          
+      /* Is the next op an update? */
+      // a failed remove/add is a read-only tx
+      if (d->effective)
+      {
+        unext = ((100 * (d->nb_added + d->nb_removed))
+          < (d->update * (d->nb_add + d->nb_remove + d->nb_contains)));
+      }
+
+      // remove/add (even failed) is considered an update
+      else
+      {
+        unext = (rand_range_re(&d->seed, 100) - 1 < d->update);
+      }
+
+      
+      parallel_case[d->id][i].invoked = invoked;
+      parallel_case[d->id][i].type    = r % 3;
+      parallel_case[d->id][i].val     = val;
+      parallel_case[d->id][i].thrd_id = d->id;
     }
   }
 	
-  /* Is the first op an update? */
-  unext = (rand_range_re(&d->seed, 100) - 1 < d->update);
-		
-  while (stop == 0) {
-			
-    if (unext) { // update
-				
-      if (last < 0) { // add
-					
-        val = rand_range_re(&d->seed, d->range);
-          if (set_add_l(d->set, val, TRANSACTIONAL)) {
-            d->nb_added++;
-            last = val;
-          } 				
-      	d->nb_add++;
-					
-      } else { // remove
-					
-	if (d->alternate) { // alternate mode
-						
-	  if (set_remove_l(d->set, last, TRANSACTIONAL)) {
-	    d->nb_removed++;
-	  }
-	  last = -1;
-						
-	} else {
-					
-	  val = rand_range_re(&d->seed, d->range);
-	  if (set_remove_l(d->set, val, TRANSACTIONAL)) {
-	    d->nb_removed++;
-	    last = -1;
-	  } 
-					
-	}
-	d->nb_remove++;
-      }
-				
-    } else { // read
-				
-      if (d->alternate) {
-	if (d->update == 0) {
-	  if (last < 0) {
-	    val = d->first;
-	    last = val;
-	  } else { // last >= 0
-	    val = rand_range_re(&d->seed, d->range);
-	    last = -1;
-	  }
-	} else { // update != 0
-	  if (last < 0) {
-	    val = rand_range_re(&d->seed, d->range);
-	    //last = val;
-	  } else {
-	    val = last;
-	  }
-	}
-      }	else val = rand_range_re(&d->seed, d->range);
-				
-      if (set_contains_l(d->set, val, TRANSACTIONAL)) 
-	d->nb_found++;
-      d->nb_contains++;			
-    }
-			
-    /* Is the next op an update? */
-    if (d->effective) { // a failed remove/add is a read-only tx
-      unext = ((100 * (d->nb_added + d->nb_removed))
-	       < (d->update * (d->nb_add + d->nb_remove + d->nb_contains)));
-    } else { // remove/add (even failed) is considered an update
-      unext = (rand_range_re(&d->seed, 100) - 1 < d->update);
-    }
-			
-  }	
   return NULL;
 }
 
@@ -255,7 +300,7 @@ int main(int argc, char **argv)
   };
 	
   intset_l_t *set;
-  int i, c, size;
+  int i, j, c, size;
   val_t last = 0; 
   val_t val = 0;
   unsigned long reads, effreads, updates, effupds, aborts, aborts_locked_read, aborts_locked_write,
@@ -280,7 +325,7 @@ int main(int argc, char **argv)
 	
   while(1) {
     i = 0;
-    c = getopt_long(argc, argv, "hAf:d:i:t:r:S:u:x:o:a:c:s", long_options, &i); //Entropy Arg (o:a:c)
+    c = getopt_long(argc, argv, "hAf:d:i:t:R:S:u:x:r:a:c:s", long_options, &i); //Entropy Arg (o:a:c)
 		
     if(c == -1)
       break;
@@ -339,7 +384,7 @@ int main(int argc, char **argv)
       case 't':
         nb_threads = atoi(optarg);
         break;
-      case 'r':
+      case 'R':
         range = atol(optarg);
         break;
       case 'S':
@@ -348,7 +393,7 @@ int main(int argc, char **argv)
       case 'u':
         update = atoi(optarg);
         break;
-      case 'o':
+      case 'r':
         num_remove_operations = atoi(optarg); //Entropy Arg
         break;
       case 'a':
@@ -361,12 +406,6 @@ int main(int argc, char **argv)
         break;
       case 'x':
         printf("The parameter x is not valid for this benchmark.\n");
-        exit(0);
-      case 'a':
-        printf("The parameter a is not valid for this benchmark.\n");
-        exit(0);
-      case 's':
-        printf("The parameter s is not valid for this benchmark.\n");
         exit(0);
       case '?':
         printf("Use -h or --help for help.\n");
@@ -411,7 +450,7 @@ int main(int argc, char **argv)
   parallel_case = malloc(nb_threads * sizeof(struct timestamp *));
   ideal_case = malloc(num_operations * sizeof(struct timestamp));
 
-  for (int i = 0; i < nb_threads; i++)
+  for (i = 0; i < nb_threads; i++)
   {
     parallel_case[i] = malloc(num_operations * sizeof(struct timestamp));
   }
@@ -459,6 +498,7 @@ int main(int argc, char **argv)
     printf("Creating thread %d\n", i);
     data[i].first = last;
     data[i].range = range;
+    data[i].id = i;
     data[i].update = update;
     data[i].alternate = alternate;
     data[i].unit_tx = unit_tx;
@@ -593,5 +633,23 @@ int main(int argc, char **argv)
   free(threads);
   free(data);
 	
+  // OUTPUT TO FILE
+  char *fileName = malloc(64 * sizeof(char));
+  sprintf(fileName, "Treiber_%dt_%di_parallel.dat", nb_threads, num_sets);
+  FILE *out = fopen(fileName, "w");
+  
+  // Output the headers
+  fprintf(out, "method\tinvoke\tproc\tobject\n");
+  for (i = 0; i < nb_threads; i++)
+  {
+    for (j = 0; j < num_operations; j++)
+    {
+      fprintf(out, "%s\t%lld\t%d\t%d\n", OPS[parallel_case[i][j].type]
+                                       , parallel_case[i][j].invoked
+                                       , parallel_case[i][j].thrd_id
+                                       , parallel_case[i][j].val);
+    }
+  }
+  
   return 0;
 }

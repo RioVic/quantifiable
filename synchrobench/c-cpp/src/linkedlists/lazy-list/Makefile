@@ -22,7 +22,7 @@ intset.o: linkedlist-lock.h coupling.h lazy.h
 	$(CC) $(CFLAGS) -c -o $(BUILDIR)/intset.o intset.c
 
 test.o: linkedlist-lock.h coupling.h lazy.h intset.h
-	$(CC) $(CFLAGS) -c -o $(BUILDIR)/test.o test.c
+	$(CC) $(CFLAGS) -c -o $(BUILDIR)/test.o testEntropy.c
 
 main: linkedlist-lock.o coupling.o lazy.o intset.o test.o
 	$(CC) $(CFLAGS) $(BUILDIR)/linkedlist-lock.o $(BUILDIR)/lazy.o $(BUILDIR)/coupling.o $(BUILDIR)/intset.o $(BUILDIR)/test.o -o $(BINS) $(LDFLAGS)
