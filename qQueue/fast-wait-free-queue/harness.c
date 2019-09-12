@@ -32,100 +32,50 @@ struct timestamp **ts;
 struct timestamp *dataIn;
 
 static pthread_barrier_t barrier;
-static double times[MAX_ITERS];
-static double means[MAX_ITERS];
-static double covs[MAX_ITERS];
-static volatile int target;
 
 char benchName[2048];
+long pairwiseSets;
+long pairwiseInterval;
+long numOpsPerThread;
+int isSequential;
+int originalNprocs;
 
-static size_t elapsed_time(size_t us)
-{
-  struct timeval t;
-  gettimeofday(&t, NULL);
-  return t.tv_sec * 1000000 + t.tv_usec - us;
-}
-
-static double compute_mean(const double * times)
-{
-  int i;
-  double sum = 0;
-
-  for (i = 0; i < NUM_ITERS; ++i) {
-    sum += times[i];
-  }
-
-  return sum / NUM_ITERS;
-}
-
-static double compute_cov(const double * times, double mean)
-{
-  double variance = 0;
-
-  int i;
-  for (i = 0; i < NUM_ITERS; ++i) {
-    variance += (times[i] - mean) * (times[i] - mean);
-  }
-
-  variance /= NUM_ITERS;
-
-  double cov = sqrt(variance);;
-  cov /= mean;
-  return cov;
-}
-
-static size_t reduce_min(long val, int id, int nprocs)
-{
-  static long buffer[MAX_PROCS];
-
-  buffer[id] = val;
-  pthread_barrier_wait(&barrier);
-
-  long min = LONG_MAX;
-  int i;
-  for (i = 0; i < nprocs; ++i) {
-    if (buffer[i] < min) min = buffer[i];
-  }
-
-  return min;
-}
-
-static void report(int id, int nprocs, int i, long us)
-{
-  long ms = reduce_min(us, id, nprocs);
-
-  if (id == 0) {
-    times[i] = ms / 1000.0;
-    printf("  #%d elapsed time: %.2f ms\n", i + 1, times[i]);
-
-    if (i + 1 >= NUM_ITERS) {
-      int n = i + 1 - NUM_ITERS;
-
-      means[i] = compute_mean(times + n);
-      covs[i] = compute_cov(times + n, means[i]);
-
-      if (covs[i] < COV_THRESHOLD) {
-        target = i;
-      }
-    }
-  }
-
-  pthread_barrier_wait(&barrier);
-}
-
-struct timestamp *readFile(int numOps)
+struct timestamp *readFile(int numOps, int nprocs)
 {
   char fileName[100];
+  char procs[8];
+  char pInt[8];
+  char pSet[8];
+  snprintf(procs, 8, "%d\0", originalNprocs);
+  snprintf(pInt, 8, "%d\0", pairwiseInterval);
+  snprintf(pSet, 8, "%d\0", pairwiseSets);
+
   strcpy(fileName, "");
   strcat(fileName, benchName+2);
-  strcat(fileName, "OrderParallel.dat");
+  strcat(fileName, "_");
+  strcat(fileName, procs);
+  strcat(fileName, "t_");
+  strcat(fileName, pInt);
+  strcat(fileName, "i_");
+  strcat(fileName, pSet);
+  strcat(fileName, "_");
+  strcat(fileName, "parallel.dat");
 
   FILE *fp = fopen(fileName, "r");
+
+  if (fp == NULL)
+  {
+    printf("Erorr: filename not found. Please run the parallel version of this test first to generate a history\n");
+    //printf("%s\n", fileName);
+    exit(EXIT_FAILURE);
+  }
+
   struct timestamp *dataIn;
   dataIn = malloc(sizeof(struct timestamp) * (numOps));
 
   char buff[2048];
-  char line[8][255];
+  char copy[2048];
+  char line[255][255];
   char *word;
   int lineIndex = 0, timestampIndex = 0;;
 
@@ -135,10 +85,13 @@ struct timestamp *readFile(int numOps)
   //Read a line
   while (fgets(buff, 2048, (FILE*)fp) != NULL)
   {
+    //printf("%s\n", buff);
     lineIndex = 0;
 
+    strcpy(copy, buff);
+
     //Seperate the buffer by individual words
-    word = strtok(buff, "\t");
+    word = strtok(copy, "\t");
 
     //Store each word of the line at seperate index of array
     while (word != NULL)
@@ -147,38 +100,58 @@ struct timestamp *readFile(int numOps)
       word = strtok(NULL, "\t");
     }
 
+    //printf("%d\n", lineIndex);
+
     //Copy over the values we need from the line to our dataIn
     strcpy(dataIn[timestampIndex].type, line[2]);
     dataIn[timestampIndex].val = atoi(line[5]);
     dataIn[timestampIndex].invoked = atoll(line[6]);
     dataIn[timestampIndex].key = atol(line[7]);
     timestampIndex++;
+
+    //printf("%s\n", buff);
   }
+
+  fclose(fp);
 
   return dataIn;
 }
 
-void exportHistory(int nprocs, int nops)
+void exportHistory(int nprocs)
 {
   FILE *fp;
   char fileName[100];
+  char procs[8];
+  char pInt[8];
+  char pSet[8];
+  snprintf(procs, 8, "%d\0", originalNprocs);
+  snprintf(pInt, 8, "%d\0", pairwiseInterval);
+  snprintf(pSet, 8, "%d\0", pairwiseSets);
+
   strcpy(fileName, "");
   strcat(fileName, benchName+2);
-  if (nprocs > 1)
-    strcat(fileName, "OrderParallel.dat");
-  else if (nprocs == 1)
-    strcat(fileName, "OrderIdeal.dat");
+  strcat(fileName, "_");
+  strcat(fileName, procs);
+  strcat(fileName, "t_");
+  strcat(fileName, pInt);
+  strcat(fileName, "i_");
+  strcat(fileName, pSet);
+  strcat(fileName, "_");
+  if (isSequential == 0)
+    strcat(fileName, "parallel.dat");
+  else if (isSequential == 1)
+    strcat(fileName, "ideal.dat");
 
   fp = fopen(fileName, "w");
   fprintf(fp, "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tkey\n");
   
   struct timestamp *operation;
 
-  for (int i = 0; i < nprocs; i++)
+  if (isSequential == 1)
   {
-    for (int k = 0; k < nops/nprocs; k++)
+    for (int i = 0; i < numOpsPerThread*originalNprocs; i++)
     {
-      operation = &ts[i][k];
+       operation = &ts[0][i];
 
       if (operation->invoked == -1)
       {
@@ -187,9 +160,29 @@ void exportHistory(int nprocs, int nops)
       }
 
       fprintf(fp, "AMD\tALG\t%s\t%d\tx\t%d\t%lli\t%d\n", 
-        operation->type, i, operation->val, operation->invoked, operation->key);
+        operation->type, 0, operation->val, operation->invoked, operation->key);
     }
   }
+  else
+  {
+    for (int i = 0; i < nprocs; i++)
+    {
+      for (int k = 0; k < numOpsPerThread; k++)
+      {
+        operation = &ts[i][k];
+
+        if (operation->invoked == -1)
+        {
+          printf("Error, blank timestamp found\n");
+          exit(EXIT_FAILURE);
+        }
+
+        fprintf(fp, "AMD\tALG\t%s\t%d\tx\t%d\t%lli\t%d\n", 
+          operation->type, i, operation->val, operation->invoked, operation->key);
+      }
+    }
+  }
+
   fclose(fp);
 }
 
@@ -211,21 +204,17 @@ static void * thread(void * bits)
   int i;
   void * result = NULL;
 
-  if (nprocs == 1)
+  if (isSequential == 1)
   {
-    result = benchmarkIdeal(id, nprocs, ts, dataIn);
+    if (id == 0)
+      result = benchmarkIdeal(id, originalNprocs, ts, dataIn);
     pthread_barrier_wait(&barrier);
   }
   else
   {
     //Execute parallel entropy test
-    for (i = 0; i < MAX_ITERS && target == 0; ++i) {
-    long us = elapsed_time(0);
     result = benchmark(id, nprocs, ts);
     pthread_barrier_wait(&barrier);
-    us = elapsed_time(us);
-    report(id, nprocs, i, us);
-   }
   }
 
   thread_exit(id, nprocs);
@@ -235,55 +224,46 @@ static void * thread(void * bits)
 int main(int argc, const char *argv[])
 {
   int nprocs = 0;
-  int n = 2;
 
-  /** The first argument is nprocs. */
-  if (argc > 1) {
-    nprocs = atoi(argv[1]);
+  if (argc != 5)
+  {
+    printf("Please use %s <Number of threads> <Pairwise Invterval> <Pairwise Sets> <Sequential Test: (0:1)>\n", argv[0]);
+    return 1;
   }
 
-  /**
-   * Use the number of processors online as nprocs if it is not
-   * specified.
-   */
-  if (nprocs == 0) {
-    nprocs = sysconf(_SC_NPROCESSORS_ONLN);
-  }
-
-  if (nprocs <= 0) return 1;
-  else {
-    /** Set concurrency level. */
-    pthread_setconcurrency(nprocs);
-  }
-
+  nprocs = atoi(argv[1]);
+  originalNprocs = nprocs;
+  pthread_setconcurrency(nprocs);
   strcpy(benchName, argv[0]);
 
-  if (nprocs == 1)
+  pairwiseInterval = atoi(argv[2]);
+  pairwiseSets = atoi(argv[3]);
+  numOpsPerThread = pairwiseInterval*pairwiseSets;
+  isSequential = atoi(argv[4]);
+
+  if (isSequential == 1)
   {
     /** Set entropy ideal case */
-    dataIn = readFile(pow(10,n));
-  }
-
-  /**
-   * The second argument is input size n.
-   */
-  if (argc > 2) {
-    n = atoi(argv[2]);
+    nprocs = 1;
+    dataIn = readFile(numOpsPerThread*originalNprocs, originalNprocs);
   }
 
   pthread_barrier_init(&barrier, NULL, nprocs);
   printf("===========================================\n");
   printf("  Benchmark: %s\n", argv[0]);
-  printf("  Number of processors: %d\n", nprocs);
+  printf("  Number of processors: %d ", originalNprocs);
+  if (isSequential)
+    printf("(Sequential Test)");
+  printf("\n");
 
-  init(nprocs, n);
+  init(originalNprocs, pairwiseInterval, pairwiseSets);
 
   //Init timestamp array
-  ts = malloc(sizeof(struct timestamp *) * nprocs);
+  ts = malloc(sizeof(struct timestamp *) * originalNprocs);
 
-  for (int k = 0; k < nprocs; k++)
+  for (int k = 0; k < originalNprocs; k++)
   {
-    ts[k] = malloc(sizeof(struct timestamp) * pow(10,n));
+    ts[k] = malloc(sizeof(struct timestamp) * numOpsPerThread);
   }
 
   pthread_t ths[nprocs];
@@ -300,45 +280,7 @@ int main(int argc, const char *argv[])
     pthread_join(ths[i], &res[i]);
   }
 
-  exportHistory(nprocs, pow(10,n));
-
-  if (nprocs == 1)
-    return;
-
-  if (target == 0) {
-    target = NUM_ITERS - 1;
-    double minCov = covs[target];
-
-    /** Pick the result that has the lowest CoV. */
-    int i;
-    for (i = NUM_ITERS; i < MAX_ITERS; ++i) {
-      if (covs[i] < minCov) {
-        minCov = covs[i];
-        target = i;
-      }
-    }
-  }
-
-  double mean = means[target];
-  double cov = covs[target];
-  int i1 = target - NUM_ITERS + 2;
-  int i2 = target + 1;
-
-  printf("  Steady-state iterations: %d~%d\n", i1, i2);
-  printf("  Coefficient of variation: %.2f\n", cov);
-  printf("  Number of measurements: %d\n", NUM_ITERS);
-  printf("  Mean of elapsed time: %.2f ms\n", mean);
-  printf("===========================================\n");
-
-  char filename[25];
-  strcpy(filename, "out/");
-  strcat(filename, argv[0]+2);
-  strcat(filename, ".dat");
-  FILE *fp = fopen(filename, "a+");
-
-  fprintf(fp, "%s\t50-50\t%d\t%.2f\t10000000\n", argv[0]+2, nprocs, mean);
-
-  fclose(fp);
+  exportHistory(nprocs);
 
   pthread_barrier_destroy(&barrier);
   return verify(nprocs, res);

@@ -43,11 +43,7 @@ faa: CFLAGS += -DFAAQ
 delay: CFLAGS += -DDELAY
 
 $(TESTS): harness.o
-ifeq (${IDEAL}, 1)
-$(TESTS): entropyIdeal.o
-else
 $(TESTS): entropy.o
-endif
 
 msqueue lcrq qqueue: hzdptr.o xxhash.o
 

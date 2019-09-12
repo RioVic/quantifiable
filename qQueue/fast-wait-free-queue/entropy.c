@@ -14,29 +14,24 @@
 #define LOGN_OPS 2
 #endif
 
-static long nops;
+long pairwiseSets;
+long pairwiseInterval;
 static queue_t * q;
 static handle_t ** hds;
 
 long long rdtsc() {
-  volatile long long tl;
-  asm __volatile__("lfence\nrdtsc" : "=a" (tl): : "%edx"); //lfence is used to wait for prior instruction (optional)
-  return tl;
+  volatile long long low, high;
+  asm __volatile__("rdtsc" : "=a" (low), "=d" (high)); //lfence is used to wait for prior instruction (optional)
+  return ((long long)high << 32) | low;
 }
 
-void init(int nprocs, int logn) {
+void init(int nprocs, long pInterval, long pSets) {
 
-  /** Use 10^7 as default input size. */
-  if (logn == 0) logn = LOGN_OPS;
+  pairwiseSets = pSets;
+  pairwiseInterval = pInterval;
 
-  /** Compute the number of ops to perform. */
-  nops = 1;
-  int i;
-  for (i = 0; i < logn; ++i) {
-    nops *= 10;
-  }
-
-  printf("  Number of operations: %ld\n", nops);
+  printf("  Number of Sets: %ld\n", pairwiseSets);
+  printf("  Size of Intervals: %ld\n", pairwiseInterval);
 
   q = align_malloc(PAGE_SIZE, sizeof(queue_t));
   queue_init(q, nprocs);
@@ -57,33 +52,38 @@ void * benchmark(int id, int nprocs, struct timestamp **ts) {
   delay_t state;
   delay_init(&state, id);
 
-  int i;
-  for (i = 0; i < nops / nprocs; ++i) {
-    unsigned long invoked = rdtsc();
-    if (i%2 == 0)
+  int i, k;
+  for (i = 0; i < pairwiseSets; i++)
+  {
+    for (k = 0 ; k < pairwiseInterval; k++)
     {
-      enqueue(q, th, val);
-      strcpy(ts[id][i].type, "Enqueue");
-      ts[id][i].val = (intptr_t)val;
-      val += nprocs;      
-    }
-    else
-    {
-      ret = dequeue(q, th);
-      strcpy(ts[id][i].type, "Dequeue");
-      ts[id][i].val = (intptr_t)ret;
-    }
-    
-    ts[id][i].key = (id) + (nprocs *i);
-    ts[id][i].invoked = invoked;
+      int timestampIndex = k + (pairwiseInterval*i);
+      unsigned long invoked = rdtsc();
+      if (i%2 == 0)
+      {
+        enqueue(q, th, val);
+        strcpy(ts[id][timestampIndex].type, "Enqueue");
+        ts[id][timestampIndex].val = (intptr_t)val;
+        val += nprocs;      
+      }
+      else
+      {
+        ret = dequeue(q, th);
+        strcpy(ts[id][timestampIndex].type, "Dequeue");
+        ts[id][timestampIndex].val = (intptr_t)ret;
+      }
+      
+      ts[id][timestampIndex].key = (id) + (nprocs * (k+(pairwiseInterval*i)));
+      ts[id][timestampIndex].invoked = invoked;
 
-    delay_exec(&state);
+      delay_exec(&state);
+    }
   }
 
   return val;
 }
 
-void * benchmarkIdeal(int id, int nprocs, struct timestamp **ts, struct timestamp *dataIn) {
+void * benchmarkIdeal(int id, int originalNprocs, struct timestamp **ts, struct timestamp *dataIn) {
   void * val = (void *) (intptr_t) (id + 1);
   void * ret;
   handle_t * th = hds[id];
@@ -91,8 +91,9 @@ void * benchmarkIdeal(int id, int nprocs, struct timestamp **ts, struct timestam
   delay_t state;
   delay_init(&state, id);
 
+  long totalOverallOps = pairwiseInterval * pairwiseSets * originalNprocs;
   int i;
-  for (i = 0; i < nops / nprocs; ++i) {
+  for (i = 0; i < totalOverallOps; ++i) {
     unsigned long invoked = rdtsc();
     if (strcmp(dataIn[i].type, "Enqueue") == 0)
     {
