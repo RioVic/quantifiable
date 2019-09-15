@@ -16,6 +16,7 @@
 
 long pairwiseSets;
 long pairwiseInterval;
+long threadInterval;
 static queue_t * q;
 static handle_t ** hds;
 
@@ -25,10 +26,11 @@ long long rdtsc() {
   return ((long long)high << 32) | low;
 }
 
-void init(int nprocs, long pInterval, long pSets) {
+void init(int nprocs, long pInterval, long pSets, long tInterval) {
 
   pairwiseSets = pSets;
   pairwiseInterval = pInterval;
+  threadInterval = tInterval;
 
   printf("  Number of Sets: %ld\n", pairwiseSets);
   printf("  Size of Intervals: %ld\n", pairwiseInterval);
@@ -55,11 +57,11 @@ void * benchmark(int id, int nprocs, struct timestamp **ts) {
   int i, k;
   for (i = 0; i < pairwiseSets; i++)
   {
-    for (k = 0 ; k < pairwiseInterval; k++)
+    for (k = 0 ; k < threadInterval * 2; k++)
     {
-      int timestampIndex = k + (pairwiseInterval*i);
+      int timestampIndex = k + (threadInterval*i);
       unsigned long invoked = rdtsc();
-      if (i%2 == 0)
+      if (k < threadInterval)
       {
         enqueue(q, th, val);
         strcpy(ts[id][timestampIndex].type, "Enqueue");
@@ -73,7 +75,7 @@ void * benchmark(int id, int nprocs, struct timestamp **ts) {
         ts[id][timestampIndex].val = (intptr_t)ret;
       }
       
-      ts[id][timestampIndex].key = (id) + (nprocs * (k+(pairwiseInterval*i)));
+      ts[id][timestampIndex].key = (id) + (nprocs * (k+(threadInterval*i)));
       ts[id][timestampIndex].invoked = invoked;
 
       delay_exec(&state);
@@ -91,7 +93,7 @@ void * benchmarkIdeal(int id, int originalNprocs, struct timestamp **ts, struct 
   delay_t state;
   delay_init(&state, id);
 
-  long totalOverallOps = pairwiseInterval * pairwiseSets * originalNprocs;
+  long totalOverallOps = threadInterval * 2 * pairwiseSets * originalNprocs;
   int i;
   for (i = 0; i < totalOverallOps; ++i) {
     unsigned long invoked = rdtsc();

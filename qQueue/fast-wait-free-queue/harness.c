@@ -39,6 +39,7 @@ long pairwiseInterval;
 long numOpsPerThread;
 int isSequential;
 int originalNprocs;
+int threadInterval;
 
 struct timestamp *readFile(int numOps, int nprocs)
 {
@@ -238,7 +239,8 @@ int main(int argc, const char *argv[])
 
   pairwiseInterval = atoi(argv[2]);
   pairwiseSets = atoi(argv[3]);
-  numOpsPerThread = pairwiseInterval*pairwiseSets;
+  threadInterval = pairwiseInterval/nprocs;
+  numOpsPerThread = threadInterval*2*pairwiseSets;
   isSequential = atoi(argv[4]);
 
   if (isSequential == 1)
@@ -256,7 +258,7 @@ int main(int argc, const char *argv[])
     printf("(Sequential Test)");
   printf("\n");
 
-  init(originalNprocs, pairwiseInterval, pairwiseSets);
+  init(originalNprocs, pairwiseInterval, pairwiseSets, threadInterval);
 
   //Init timestamp array
   ts = malloc(sizeof(struct timestamp *) * originalNprocs);
