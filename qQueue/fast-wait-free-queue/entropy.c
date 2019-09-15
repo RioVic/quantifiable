@@ -59,7 +59,7 @@ void * benchmark(int id, int nprocs, struct timestamp **ts) {
   {
     for (k = 0 ; k < threadInterval * 2; k++)
     {
-      int timestampIndex = k + (threadInterval*i);
+      int timestampIndex = k + (threadInterval*2*i);
       unsigned long invoked = rdtsc();
       if (k < threadInterval)
       {
