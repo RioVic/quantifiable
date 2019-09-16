@@ -146,6 +146,7 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 			//Place our descriptor in the node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
+
 				//Check for ABA?
 				if (top[headIndex] != cur)
 				{
@@ -164,7 +165,7 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 				else
 				{
 					std::cout << "Inverse Stack Disabled\n";
-					exit(EXIT_FAILURE);
+					//exit(EXIT_FAILURE);
 
 					//Remove this node instead of pushing
 					if (!this->remove(tid, opn, v, headIndex, cur, popOpn, popThread))
@@ -174,6 +175,7 @@ bool QStackDesc<T>::push(int tid, int opn, T ins, T &v, int &popOpn, int &popThr
 					}
 					else
 					{
+
 						d->active = false;
 						return true;
 					}
@@ -264,10 +266,10 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 					continue;
 				}
 
-				if (cur->isSentinel() || cur->type() == Pop)
+				if ((cur->isSentinel() && cur->hasNoPreds()) || cur->type() == Pop)
 				{
 					std::cout << "Inverse Stack Disabled: " << tid << " " << opn << "\n";
-					exit(EXIT_FAILURE);
+					//exit(EXIT_FAILURE);
 
 					Node *elem = &NodeAlloc[tid][opn];
 					elem->type(Pop);
@@ -284,16 +286,28 @@ bool QStackDesc<T>::pop(int tid, int opn, T& v)
 					int pushOpn;
 					int popThread;
 
-					//Attempt to remove as normal
-					if (!this->remove(tid, opn, v, headIndex, cur, pushOpn, popThread))
+					//Get second descriptor
+					Node *cur_next = cur->next();
+					Desc *next_desc = cur_next->desc.load();
+
+					if ((next_desc == nullptr || next_desc->active == false) && cur_next->desc.compare_exchange_weak(next_desc, d))
 					{
-						cur->desc = nullptr;
-						threadIndex[tid] = (headIndex + 1) % this->num_threads;
+						//Attempt to remove as normal
+						if (!this->remove(tid, opn, v, headIndex, cur, pushOpn, popThread))
+						{
+							cur->desc = nullptr;
+							cur_next->desc = nullptr;
+							threadIndex[tid] = (headIndex + 1) % this->num_threads;
+						}
+						else
+						{
+							d->active = false;
+							return true;
+						}
 					}
 					else
 					{
-						d->active = false;
-						return true;
+						cur->desc = nullptr;
 					}
 				}
 			}
@@ -337,7 +351,7 @@ bool QStackDesc<T>::add(int tid, int opn, int headIndex, Node *cur, Node *elem)
 	int req = forkRequest.load();
 
 	//Try to satisfy the fork request if it exists
-	if (req && cur->predNotFull(top, num_threads) && forkRequest.compare_exchange_weak(req, 0))
+	if (req && cur->predNotFull(top, num_threads) && ! cur->isSentinel() && forkRequest.compare_exchange_weak(req, 0))
 	{
 		//Point an available head pointer at curr
 		for (int i = 0; i < num_threads; i++)
@@ -369,6 +383,7 @@ bool QStackDesc<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur, int
 		cur->next()->removePred(cur);
 		//topDepths[headIndex] = cur->depth();
 		top[headIndex] = cur->next();
+		cur->next(nullptr);
 		return true;
 	}
 	else
@@ -486,34 +501,91 @@ public:
 				return;
 			}
 		}
+
+		std::cout << "Failure to add pred\n";
+		//exit(EXIT_FAILURE);
 	}
 
-	bool verifyLink(std::atomic<Node *> *top)
+	bool verifyLink(std::atomic<Node *> *top, int num_threads)
 	{
-		if (_next == nullptr)
+		if (_next != nullptr)
 		{
-			if (isSentinel())
-				return true;
-
-			for (int i = 0; i < 4; i++)
+			bool sat = false;
+			for (int i = 0; i < MAX_FORK_AT_NODE; i++)
 			{
-				if (top[i] == this)
+				Node *n = _next->_pred[i];
+				if (n == this)
+					sat = true;
+			}
+
+			if (!sat)
+				return false;
+		}
+
+		bool empty = true;
+		bool full = true;
+		Node *predCopy2[MAX_FORK_AT_NODE];
+		for (int i = 0; i < MAX_FORK_AT_NODE; i++)
+		{
+			Node *n = _pred[i];
+			predCopy2[i] = n;
+			if (n != nullptr && n->_next != this)
+				return false;
+
+			if (n != nullptr)
+				empty = false;
+
+			if (n == nullptr)
+				full = false;
+		}
+
+		if (_next != nullptr)
+		{
+			bool sat = false;
+			for (int i = 0; i < num_threads; i++)
+			{
+				Node *n = top[i].load();
+				if (n == this)
+					sat = true;
+			}
+
+			//if (!sat)
+				//return false;
+		}
+
+		if (full)
+		{
+			for (int i = 0; i < num_threads; i++)
+			{
+				Node *n = top[i].load();
+				if (n == this)
 					return false;
 			}
-			return true;
 		}
 
-		Node **preds = _next->pred();
-		for (int i = 0; i < 2; i++)
+		int preds = 0;
+		int heads = 0;
+		Node *predCopy[MAX_FORK_AT_NODE];
+		Node *topCopy[num_threads];
+		for (int i = 0; i < num_threads; i++)
 		{
-			Node *n = preds[i];
+			Node *n = top[i].load();
+			topCopy[i] = n;
 			if (n == this)
-			{
-				return true;
-			}
+				heads++;
+		}
+		for (int i = 0; i < MAX_FORK_AT_NODE; i++)
+		{
+			Node *n = _pred[i];
+			predCopy[i] = n;
+			if (n != nullptr)
+				preds++;
 		}
 
-		return false;
+		if (heads+preds > MAX_FORK_AT_NODE)
+			return false;
+
+		return true;
 	}
 
 	void removePred(Node *p)
@@ -527,6 +599,9 @@ public:
 				return;
 			}
 		}
+
+		std::cout << "Failure to remove pred\n";
+		//exit(EXIT_FAILURE);
 	}
 
 	bool hasNoPreds()

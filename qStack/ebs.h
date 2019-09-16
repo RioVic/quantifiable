@@ -8,8 +8,8 @@
 #include<ctime>
 #include<time.h>
 
-#define ELIM_CAPACITY 10000 // capacity of elimination array
-#define ELIM_TIMEOUT 1000
+#define ELIM_CAPACITY 100 // capacity of elimination array
+#define ELIM_TIMEOUT 5
 #define EMPTY 0
 #define WAITING 1
 #define BUSY 2

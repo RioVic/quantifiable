@@ -250,7 +250,7 @@ void executeHistorySequentially(int num_ops_total, int num_threads, T *s)
 		}
 		else
 		{
-			std::cout << "Error: timestamp found without type\n";
+			std::cout << "Error: timestamp found without type: " << i << "\n";
 			exit(EXIT_FAILURE);
 		}
 
