@@ -48,7 +48,7 @@ void readHistory(std::ifstream &f, std::vector<operation> &v)
 			lineElems.push_back(line);
 		}
 
-		if (lineElems[2] == "Push")
+		if (lineElems[2] == "Enqueue")
 		{
 			continue;
 		}

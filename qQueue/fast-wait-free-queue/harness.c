@@ -11,6 +11,7 @@
 #include "bits.h"
 #include "cpumap.h"
 #include "benchmark.h"
+#include <stdlib.h>
 
 #ifndef NUM_ITERS
 #define NUM_ITERS 1
@@ -40,6 +41,14 @@ long numOpsPerThread;
 int isSequential;
 int originalNprocs;
 int threadInterval;
+
+int compareTimestamp(const void *t1, const void *t2)
+{
+  if (((struct timestamp *)t1)->invoked < ((struct timestamp *)t2)->invoked)
+    return -1;
+  else 
+    return 1;
+}
 
 struct timestamp *readFile(int numOps, int nprocs)
 {
@@ -109,11 +118,11 @@ struct timestamp *readFile(int numOps, int nprocs)
     dataIn[timestampIndex].invoked = atoll(line[6]);
     dataIn[timestampIndex].key = atol(line[7]);
     timestampIndex++;
-
-    //printf("%s\n", buff);
   }
 
   fclose(fp);
+
+  qsort((void *)dataIn, timestampIndex, sizeof(struct timestamp), compareTimestamp);
 
   return dataIn;
 }
@@ -265,7 +274,7 @@ int main(int argc, const char *argv[])
 
   for (int k = 0; k < originalNprocs; k++)
   {
-    ts[k] = malloc(sizeof(struct timestamp) * numOpsPerThread);
+    ts[k] = malloc(sizeof(struct timestamp) * (numOpsPerThread*originalNprocs));
   }
 
   pthread_t ths[nprocs];
