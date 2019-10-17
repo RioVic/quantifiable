@@ -10,7 +10,7 @@
 #include "unboundedsize_kfifo.h"
 #include "./util/rdtsc.h"
 
-#define K 2
+int queue_param_k;
 
 struct __attribute__((aligned(64))) timestamp
 {
@@ -141,7 +141,7 @@ void work(int thread_id, int num_threads)
 void exportHistory(int num_threads)
 {
 	std::ofstream parallelF;
-	parallelF.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(PAIRWISE_INTERVAL) + std::string("i_") + std::to_string(PAIRWISE_SETS) + std::string("_parallel.dat"), std::ios_base::app);
+	parallelF.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(queue_param_k) + std::string("k_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(PAIRWISE_INTERVAL) + std::string("i_") + std::to_string(PAIRWISE_SETS) + std::string("_parallel.dat"), std::ios_base::app);
 
 	//Merge all timestamps arrays into vector and sort
 	allOpCount = (NUM_OPS*num_threads);
@@ -204,7 +204,7 @@ void executeHistorySequentially(int num_ops_total, int num_threads)
 
 	//Export results to file
 	std::ofstream idealF;
-	idealF.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(PAIRWISE_INTERVAL) + std::string("i_") + std::to_string(PAIRWISE_SETS) + std::string("_ideal.dat"), std::ios_base::app);
+	idealF.open(std::string("AMD_") + MODE + std::string("_") + std::to_string(queue_param_k) + std::string("k_") + std::to_string(NUM_THREADS) + std::string("t_") + std::to_string(PAIRWISE_INTERVAL) + std::string("i_") + std::to_string(PAIRWISE_SETS) + std::string("_ideal.dat"), std::ios_base::app);
 	idealF << "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\tkey\n";
 
 	writeToFile(idealF, allOpCount, idealCaseTimestamps);
@@ -212,9 +212,9 @@ void executeHistorySequentially(int num_ops_total, int num_threads)
 
 int main(int argc, char** argv)
 {
-	if (argc < 4 || strcmp(argv[1],"--help") == 0)
+	if (argc < 5 || strcmp(argv[1],"--help") == 0)
 	{
-		std::cout << "Please use: " << argv[0] << " <number of threads> <size of operation intervals> <number of intervals>\n";
+		std::cout << "Please use: " << argv[0] << " <number of threads> <size of operation intervals> <number of intervals> <k>\n";
 		return -1;
 	}
 
@@ -222,6 +222,7 @@ int main(int argc, char** argv)
 	PAIRWISE_INTERVAL = atoi(argv[2]);
 	PAIRWISE_SETS = atoi(argv[3]);
 	MODE = std::string("KFifoQueue");
+	queue_param_k = atoi(argv[4]);
 
 	THREAD_INTERVAL = PAIRWISE_INTERVAL/NUM_THREADS;
 	NUM_OPS = THREAD_INTERVAL*2*PAIRWISE_SETS;
@@ -241,7 +242,7 @@ int main(int argc, char** argv)
 
     //Spawn threads and send them into work loop
     std::vector<std::thread> threads;
-    q = new scal::UnboundedSizeKFifo<long unsigned int>(K);
+    q = new scal::UnboundedSizeKFifo<long unsigned int>(queue_param_k);
     auto start = std::chrono::high_resolution_clock::now();
 
     for (int j = 0; j < NUM_THREADS; j++)
@@ -256,7 +257,7 @@ int main(int argc, char** argv)
     exportHistory(NUM_THREADS);
     delete q;
 
-    q = new scal::UnboundedSizeKFifo<long unsigned int>(K);
+    q = new scal::UnboundedSizeKFifo<long unsigned int>(queue_param_k);
     executeHistorySequentially(NUM_OPS, NUM_THREADS);
 
 }
