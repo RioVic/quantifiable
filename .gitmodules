@@ -1,0 +1,3 @@
+[submodule "synchrobench"]
+	path = synchrobench
+	url = https://github.com/gramoli/synchrobench.git
