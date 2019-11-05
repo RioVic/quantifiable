@@ -1,0 +1,70 @@
+Entropy of Queues and how to apply the same principals to Sets
+===============================================================
+
+Entropy of queues are calculated by measuring the inversions of the popped results, as in the Quantifiability paper.
+
+As a reminder, for each element in a, tally:
+x(j) = count(i < j, ai > aj) + count(i > j, ai < aj) 
+
+Let's define an operation as a tuple of (method call, result). IE, (pop, 'A').
+Measuring the entropy of the results array assumes that there's a 1 to 1 bijection from the expected operations to the actual operations. It doesn't matter which invocation of pop was called for each result - they are indistinguishable and each object will be popped once in any case. So, the real multicore results are just a reordering of the expected results. Consider the example:
+
+Expected pop order:
+(pop a)(pop b)(pop c)(pop d)
+Multicore pop order:
+(pop d)(pop a)(pop b)(pop c)
+Inversions:
+3, 1, 1, 1
+
+Note that I've emitted all push operations.
+An inversion here can be caused by either a pop operation invoking out of order, or a push operation pushing the object out of order in the first place.
+Note that two mirroring inversions in the pop and push operations will cancel and will not be reveiled. This is a limitation of the entropy analysis that we must accept.
+
+
+Sets
+====
+
+For sets, let's first make some observations, then consider the operations available.
+Let's just consider the operations done on a single element for now (A). All other operations done on other elements have no bearing on the correct results for operations done on A.
+There are now 4 operations, 
++. Add (A)
+-. Del (A)
+Y. Read (A) Exists
+N. Read (A) Doesn't exist
+
+Consider the example:
+Expected run:
++YYY-N
+Multicore run with inversions:
++YNN-N
+
+(Note that we have chosen to line up the positions of add, delete and read operations. That is just our "reference" order we choose to measure inversion for. The order is established by either timestamp or pre-loaded script or whatever, as long as an unambiguous reference order that is valid within linearity, etc.)
+
+In this example, there is no bijection between read operations in the expected and real multicore runs. There is no concept of "which" operation is which. In the queue case, there was only an illusion of knowing "which" operation be which because of the bijection in pop operation results. But in reality there is no link, and the only link is the one that runs the operation types in order in parallel.
+
+Proposed inversion count model for sets
+===============================
+
+Just like how the queue entropy metric won't identify mirroring inversions in the push/pop operations, we must allow some limitations in the sets entropy metric too. However the limitations are far greater. Not surprising because the read operation is binary whereas the pop operation has N possible values.
+
+I propose this simple model for now, unless you give me a concrete model/equation to implement that you prefer.
+
+We measure inversion for every element.
+For an add/delete operation, we find the furtherest distance we must go to turn an incorrect read into a correct one, where the read operation can be fixed cheapest by moving that add/delete operation.
+For a read operation, find the shortest distance we must travel to get to a spot where my read result matches the expected read result.
+
+Consider the previous set example: (and also, dot (.) is an operation on another element. They are independent correctness-wise.)
+
+Expected run:
++..YY.Y-.....N
+Multicore run with inversions:
++..YN.N-.....N
+Inversions:
+0..03.1......0
+
+
+(Note that we isolated a single element and its operations. There are actually operations on other elements wedged in between them but we look at them later in turn.)
+
+Implementation:
+
+Pre-prescribe the operation invocation order, then run them in multicore and single core, and record the results. We can include timestamps, but if we pre-prescribed the order then the timestamps are not actually useful, since they were only used to determine order in the first place.
