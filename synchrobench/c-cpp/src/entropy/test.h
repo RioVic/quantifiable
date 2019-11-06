@@ -47,5 +47,6 @@ void reset_tests();
 void *test(void *data);
 operation_t *prepare_test(options_t opts, unsigned int *seed);
 void replay(thread_data_t *data);
+void dump_operations(operation_t *ops, int num_ops, char* filename);
 
 #endif

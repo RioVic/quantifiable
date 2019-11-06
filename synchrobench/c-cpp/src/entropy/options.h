@@ -9,6 +9,7 @@
 #define DEFAULT_ELEMENT_RANGE 256
 #define DEFAULT_THREAD_NUM 8
 #define DEFAULT_SEED 0 
+#define DEFAULT_OUTPUT "operations.dat"
 
 
 typedef struct options {
@@ -18,6 +19,7 @@ typedef struct options {
 	long range;
 	int seed;
 	int thread_num;
+	char filename[1000];
 } options_t;
 
 options_t read_options(int argc, char** argv);

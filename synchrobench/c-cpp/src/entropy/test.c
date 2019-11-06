@@ -1,6 +1,6 @@
 #include "testutils.h"
 #include "test.h"
-
+#include "stdio.h"
 
 long long current_time_ms (void)
 {
@@ -66,6 +66,27 @@ void *test(void *data) {
     return NULL;
 }
 
+void replay(thread_data_t *d) {
+    int i;
+    for (i = 0; i < d->num_ops; i++) {
+	operation_t *op = &d->ops[i];
+
+	switch (op->type) {
+	    case ADD:
+		op->replay_result = set_add_l(d->set, op->arg, TRANSACTIONAL);
+		break;
+	    case DELETE:
+		op->replay_result = set_remove_l(d->set, op->arg, TRANSACTIONAL);
+		break;
+	    case READ:
+		op->replay_result = set_contains_l(d->set, op->arg, TRANSACTIONAL);
+		break;
+	    default:
+		assert(0);
+	} 
+    } 
+}
+
 operation_t *prepare_test(options_t opt, unsigned int *seed) {
     int num_ops = opt.add_operations + opt.del_operations + opt.read_operations;
     operation_t *operations = (operation_t*)malloc(num_ops * sizeof (operation_t));
@@ -97,5 +118,27 @@ operation_t *prepare_test(options_t opt, unsigned int *seed) {
 	operations[i] = tmp;
     }
 
+    // id them ???
+    for (i = 0; i < num_ops; i++) {
+        operations[i].id = i;
+    }
+
     return operations;
 }
+
+
+void dump_operations(operation_t *ops, int num_ops, char* filename) {
+    FILE *fp = fopen(filename, "w");
+    int i;
+    for (i = 0; i < num_ops; i++) {
+	fprintf(fp, "%d %d %ld %lld %d %d\n",
+		ops[i].id,
+		ops[i].type,
+		ops[i].arg,
+		ops[i].completed_timestamp,
+		ops[i].result,
+		ops[i].replay_result
+	       );
+    }
+    fclose(fp);
+};

@@ -1,4 +1,5 @@
 #include "options.h"
+#include <string.h>
 
 options_t read_options(int argc, char** argv) {
   struct option long_options[] = {
@@ -10,6 +11,7 @@ options_t read_options(int argc, char** argv) {
     {"add-operations",            required_argument, NULL, 'a'},
     {"del-operations",            required_argument, NULL, 'd'},
     {"read-operations",           required_argument, NULL, 'r'},
+    {"output",                    required_argument, NULL, 'o'},
     {NULL, 0, NULL, 0}
   };
 
@@ -19,11 +21,12 @@ options_t read_options(int argc, char** argv) {
   options.seed = DEFAULT_SEED;
   options.add_operations = DEFAULT_ADD_OPERATIONS;
   options.del_operations = DEFAULT_DEL_OPERATIONS;
+  strcpy(options.filename, DEFAULT_OUTPUT);
 
   int i, c;
   while(1) {
     i = 0;
-    c = getopt_long(argc, argv, "ht:R:S:a:d:r:", long_options, &i);
+    c = getopt_long(argc, argv, "ht:R:S:a:d:r:o:", long_options, &i);
 		
     if(c == -1)
       break;
@@ -57,6 +60,8 @@ options_t read_options(int argc, char** argv) {
 	     "        Total delete operations (default=" XSTR(DEFAULT_DEL_OPERATIONS) ")\n"
 	     "  -r, --read-operations <int>\n"
 	     "        Total read operations (default=" XSTR(DEFAULT_READ_OPERATIONS) ")\n"
+	     "  -o, --output <int>\n"
+	     "        output file (default=" DEFAULT_OUTPUT ")\n"
 	     );
       exit(0);
     case 'd':
@@ -77,6 +82,8 @@ options_t read_options(int argc, char** argv) {
     case 'r':
       options.read_operations = atoi(optarg);
       break;
+    case 'o':
+      strcpy(options.filename, optarg);
     default:
       exit(1);
     }

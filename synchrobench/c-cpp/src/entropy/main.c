@@ -26,7 +26,7 @@
 
 void create_thread(thread_data_t *data, pthread_t *thread, options_t opt, 
 	intset_l_t *set, barrier_t *barrier, operation_t *operations);
-void write_stats(thread_data_t *data, int nb_threads, intset_l_t *set);
+void print_stats(thread_data_t *data, int nb_threads, intset_l_t *set);
 
 int main(int argc, char **argv)
 {
@@ -104,7 +104,13 @@ int main(int argc, char **argv)
   printf("STOPPED...\n");
 	
 	
-  write_stats(data, opt.thread_num, set);
+  print_stats(data, opt.thread_num, set);
+
+  // replay and output the results
+  data[0].set = set_new_l();
+  replay(&data[0]);
+
+  dump_operations(operations, data[0].num_ops, opt.filename);
   /* Delete set */
   set_delete_l(set);
 	
@@ -114,7 +120,7 @@ int main(int argc, char **argv)
   return 0;
 }
 
-void write_stats(thread_data_t* data, int nb_threads, intset_l_t *set) {
+void print_stats(thread_data_t* data, int nb_threads, intset_l_t *set) {
 
     unsigned long reads, effreads, updates, effupds, aborts, aborts_locked_read, aborts_locked_write,
     aborts_validate_read, aborts_validate_write, aborts_validate_commit,
