@@ -10,9 +10,9 @@ CFLAGS += -std=gnu89
 
 all:	main
 
-main: test.c
+main: test.c testutils.h testutils.c options.c options.h
 	$(MAKE) -C $(ROOT)/src/linkedlists/lazy-list/
-	$(CC) $(CFLAGS) -I $(INCLUDE) -L$(BUILDIR)/ test.c -l:$(LOCK)-lazy-list.a -o $(BINS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -I $(INCLUDE) -L$(BUILDIR)/ main.c test.c testutils.c options.c -l:$(LOCK)-lazy-list.a -o $(BINS) $(LDFLAGS)
 
 clean:
 	rm -f $(BINS)

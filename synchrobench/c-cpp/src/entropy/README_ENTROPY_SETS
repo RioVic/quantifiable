@@ -68,3 +68,4 @@ Inversions:
 Implementation:
 
 Pre-prescribe the operation invocation order, then run them in multicore and single core, and record the results. We can include timestamps, but if we pre-prescribed the order then the timestamps are not actually useful, since they were only used to determine order in the first place.
+
