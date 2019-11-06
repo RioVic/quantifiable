@@ -5,16 +5,17 @@ options_t read_options(int argc, char** argv) {
     // These options don't set a flag
     {"help",                      no_argument,       NULL, 'h'},
     {"thread-num",                required_argument, NULL, 't'},
-    {"range",                     required_argument, NULL, 'r'},
+    {"range",                     required_argument, NULL, 'R'},
     {"seed",                      required_argument, NULL, 'S'},
     {"add-operations",            required_argument, NULL, 'a'},
     {"del-operations",            required_argument, NULL, 'd'},
+    {"read-operations",           required_argument, NULL, 'r'},
     {NULL, 0, NULL, 0}
   };
 
   options_t options;
   options.thread_num = DEFAULT_THREAD_NUM;
-  options.range = DEFAULT_RANGE;
+  options.range = DEFAULT_ELEMENT_RANGE;
   options.seed = DEFAULT_SEED;
   options.add_operations = DEFAULT_ADD_OPERATIONS;
   options.del_operations = DEFAULT_DEL_OPERATIONS;
@@ -22,7 +23,7 @@ options_t read_options(int argc, char** argv) {
   int i, c;
   while(1) {
     i = 0;
-    c = getopt_long(argc, argv, "ht:r:S:a:d:", long_options, &i);
+    c = getopt_long(argc, argv, "ht:R:S:a:d:r:", long_options, &i);
 		
     if(c == -1)
       break;
@@ -46,7 +47,7 @@ options_t read_options(int argc, char** argv) {
 	     "        Print this message\n"
 	     "  -t, --thread-num <int>\n"
 	     "        Number of threads (default=" XSTR(DEFAULT_THREAD_NUM) ")\n"
-	     "  -r, --range <int>\n"
+	     "  -R, --range <int>\n"
 	     "        Range of integer values inserted in set (default=" XSTR(DEFAULT_RANGE) ")\n"
 	     "  -S, --seed <int>\n"
 	     "        RNG seed (0=time-based, default=" XSTR(DEFAULT_SEED) ")\n"
@@ -54,6 +55,8 @@ options_t read_options(int argc, char** argv) {
 	     "        Total add operations (default=" XSTR(DEFAULT_ADD_OPERATIONS) ")\n"
 	     "  -d, --del-operations <int>\n"
 	     "        Total delete operations (default=" XSTR(DEFAULT_DEL_OPERATIONS) ")\n"
+	     "  -r, --read-operations <int>\n"
+	     "        Total read operations (default=" XSTR(DEFAULT_READ_OPERATIONS) ")\n"
 	     );
       exit(0);
     case 'd':
@@ -62,7 +65,7 @@ options_t read_options(int argc, char** argv) {
     case 't':
       options.thread_num = atoi(optarg);
       break;
-    case 'r':
+    case 'R':
       options.range = atol(optarg);
       break;
     case 'S':
@@ -70,6 +73,9 @@ options_t read_options(int argc, char** argv) {
       break;
     case 'a':
       options.add_operations = atoi(optarg);
+      break;
+    case 'r':
+      options.read_operations = atoi(optarg);
       break;
     default:
       exit(1);
@@ -80,5 +86,7 @@ options_t read_options(int argc, char** argv) {
   assert(options.range > 0);
   assert(options.add_operations >= 0);
   assert(options.del_operations >= 0);
+  assert(options.read_operations >= 0);
+  assert(options.add_operations || options.del_operations || options.read_operations);
   return options;
 }

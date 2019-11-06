@@ -24,7 +24,8 @@
 #include "test.h"
 #include "options.h"
 
-void create_thread(thread_data_t *data, pthread_t *thread, options_t opt, intset_l_t *set, barrier_t *barrier);
+void create_thread(thread_data_t *data, pthread_t *thread, options_t opt, 
+	intset_l_t *set, barrier_t *barrier, operation_t *operations);
 void write_stats(thread_data_t *data, int nb_threads, intset_l_t *set);
 
 int main(int argc, char **argv)
@@ -48,6 +49,7 @@ int main(int argc, char **argv)
   printf("Seed         : %d\n", opt.seed);
   printf("#add ops     : %d\n", opt.add_operations);
   printf("#delete ops  : %d\n", opt.del_operations);
+  printf("#read ops    : %d\n", opt.read_operations);
   printf("Type sizes   : int=%d/long=%d/ptr=%d/word=%d\n",
 	 (int)sizeof(int),
 	 (int)sizeof(long),
@@ -76,11 +78,14 @@ int main(int argc, char **argv)
   /* Init STM */
   printf("Initializing STM\n");
 	
+  unsigned int seed = rand();
+  operation_t *operations = prepare_test(opt, &seed);
+
   /* Access set from all threads */
   barrier_init(&barrier, opt.thread_num + 1);
   for (i = 0; i < opt.thread_num; i++) {
       printf("Creating thread %d\n", i);
-      create_thread(data + i, threads + i, opt, set, &barrier);
+      create_thread(data + i, threads + i, opt, set, &barrier, operations);
   }
 	
   /* Start threads */
@@ -184,14 +189,13 @@ void write_stats(thread_data_t* data, int nb_threads, intset_l_t *set) {
 }
 
 
-void create_thread(thread_data_t *data, pthread_t *thread, options_t opt, intset_l_t *set, barrier_t *barrier) {
+void create_thread(thread_data_t *data, pthread_t *thread, options_t opt, 
+	intset_l_t *set, barrier_t *barrier, operation_t *operations) {
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
     data->range = opt.range;
     data->unit_tx = DEFAULT_LOCKTYPE;
-    data->add_operations = opt.add_operations;
-    data->del_operations = opt.del_operations;
     data->nb_add = 0;
     data->nb_added = 0;
     data->nb_remove = 0;
@@ -206,9 +210,10 @@ void create_thread(thread_data_t *data, pthread_t *thread, options_t opt, intset
     data->nb_aborts_validate_commit = 0;
     data->nb_aborts_invalid_memory = 0;
     data->max_retries = 0;
-    data->seed = rand();
     data->set = set;
     data->barrier = barrier;
+    data->ops = operations;
+    data->num_ops = opt.add_operations + opt.del_operations + opt.read_operations;
     if (pthread_create(thread, &attr, test, (void *)(data)) != 0) {
       fprintf(stderr, "Error creating thread\n");
       exit(1);

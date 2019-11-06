@@ -1,13 +1,27 @@
 #ifndef TEST_H
 #define TEST_H
 #include "testutils.h"
+#include "options.h"
+
+typedef enum _operation_type {
+  ADD,
+  DELETE,
+  READ
+} operation_type;
+
+typedef struct operation {
+  int id;
+  operation_type type;
+  long arg;
+  long long completed_timestamp;
+  int result;
+  int replay_result;
+} operation_t;
 
 typedef struct thread_data {
   val_t first;
   long range;
   long unit_tx;
-  unsigned long add_operations;
-  unsigned long del_operations;
   unsigned long nb_add;
   unsigned long nb_added;
   unsigned long nb_remove;
@@ -22,10 +36,16 @@ typedef struct thread_data {
   unsigned long nb_aborts_validate_commit;
   unsigned long nb_aborts_invalid_memory;
   unsigned long max_retries;
-  unsigned int seed;
   intset_l_t *set;
   barrier_t *barrier;
+  operation_t *ops;
+  unsigned int num_ops;
 } thread_data_t;
 
+
+void reset_tests();
 void *test(void *data);
+operation_t *prepare_test(options_t opts, unsigned int *seed);
+void replay(thread_data_t *data);
+
 #endif
