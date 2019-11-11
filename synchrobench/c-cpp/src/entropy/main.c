@@ -21,11 +21,15 @@
  * GNU General Public License for more details.
  */
 
+#define IS_IDEAL 1
+#define IS_PARALLEL 0
+
 #include "test.h"
 #include "options.h"
+#include "string.h"
 
 void create_thread(thread_data_t *data, pthread_t *thread, options_t opt, 
-	intset_l_t *set, barrier_t *barrier, operation_t *operations);
+	intset_l_t *set, barrier_t *barrier, operation_t *operations, int thread_id);
 void print_stats(thread_data_t *data, int nb_threads, intset_l_t *set);
 
 int main(int argc, char **argv)
@@ -85,7 +89,7 @@ int main(int argc, char **argv)
   barrier_init(&barrier, opt.thread_num + 1);
   for (i = 0; i < opt.thread_num; i++) {
       printf("Creating thread %d\n", i);
-      create_thread(data + i, threads + i, opt, set, &barrier, operations);
+      create_thread(data + i, threads + i, opt, set, &barrier, operations, i);
   }
 	
   /* Start threads */
@@ -110,7 +114,13 @@ int main(int argc, char **argv)
   data[0].set = set_new_l();
   replay(&data[0]);
 
-  dump_operations(operations, data[0].num_ops, opt.filename);
+  char ideal[strlen(opt.filename) + 100];
+  char parallel[strlen(opt.filename) + 100];
+  strcpy(ideal, opt.filename);
+  strcpy(parallel, opt.filename);
+
+  dump_operations(operations, data[0].num_ops, strcat(ideal, "_ideal.dat"), IS_IDEAL);
+  dump_operations(operations, data[0].num_ops, strcat(parallel, "_parallel.dat"), IS_PARALLEL);
   /* Delete set */
   set_delete_l(set);
 	
@@ -196,10 +206,11 @@ void print_stats(thread_data_t* data, int nb_threads, intset_l_t *set) {
 
 
 void create_thread(thread_data_t *data, pthread_t *thread, options_t opt, 
-	intset_l_t *set, barrier_t *barrier, operation_t *operations) {
+	intset_l_t *set, barrier_t *barrier, operation_t *operations, int thread_id) {
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    data->thread_id = thread_id;
     data->range = opt.range;
     data->unit_tx = DEFAULT_LOCKTYPE;
     data->nb_add = 0;

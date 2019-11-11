@@ -9,7 +9,7 @@
 #define DEFAULT_ELEMENT_RANGE 256
 #define DEFAULT_THREAD_NUM 8
 #define DEFAULT_SEED 0 
-#define DEFAULT_OUTPUT "operations.dat"
+#define DEFAULT_OUTPUT "ops"
 
 
 typedef struct options {

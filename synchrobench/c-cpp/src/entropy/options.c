@@ -11,7 +11,7 @@ options_t read_options(int argc, char** argv) {
     {"add-operations",            required_argument, NULL, 'a'},
     {"del-operations",            required_argument, NULL, 'd'},
     {"read-operations",           required_argument, NULL, 'r'},
-    {"output",                    required_argument, NULL, 'o'},
+    {"output-prefix",             required_argument, NULL, 'o'},
     {NULL, 0, NULL, 0}
   };
 
@@ -60,7 +60,7 @@ options_t read_options(int argc, char** argv) {
 	     "        Total delete operations (default=" XSTR(DEFAULT_DEL_OPERATIONS) ")\n"
 	     "  -r, --read-operations <int>\n"
 	     "        Total read operations (default=" XSTR(DEFAULT_READ_OPERATIONS) ")\n"
-	     "  -o, --output <int>\n"
+	     "  -o, --output-prefix <int>\n"
 	     "        output file (default=" DEFAULT_OUTPUT ")\n"
 	     );
       exit(0);

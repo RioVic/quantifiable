@@ -39,6 +39,7 @@ void *test(void *data) {
 	}
 
 	operation_t *op = &d->ops[this_op-1];
+	op->thread_id = d->thread_id;
 
 	switch (op->type) {
 	    case ADD:
@@ -84,6 +85,7 @@ void replay(thread_data_t *d) {
 	    default:
 		assert(0);
 	} 
+	op->completed_timestamp_ideal = current_time_ms();
     } 
 }
 
@@ -127,17 +129,35 @@ operation_t *prepare_test(options_t opt, unsigned int *seed) {
 }
 
 
-void dump_operations(operation_t *ops, int num_ops, char* filename) {
+void dump_operations(operation_t *ops, int num_ops, char* filename, int isIdeal) {
     FILE *fp = fopen(filename, "w");
+    fprintf(fp, "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\tkey\n");
+
     int i;
     for (i = 0; i < num_ops; i++) {
-	fprintf(fp, "%d %d %ld %lld %d %d\n",
-		ops[i].id,
-		ops[i].type,
+	char op_buf[512];
+	switch (ops[i].type) {
+	    case READ:
+		sprintf(op_buf, "%s", "CONTAINS");
+		break;
+	    case ADD:
+		sprintf(op_buf, "%s", "ADD");
+		break;
+	    case DELETE:
+		sprintf(op_buf, "%s", "REMOVE");
+		break;
+	}
+
+	fprintf(fp, "AMD\tLazyList\t%s\t%d\t%d\t%d\t%llu\t%d\t%d\t%llu\t%d\n",
+		op_buf,
+		ops[i].thread_id,
+		isIdeal ? ops[i].replay_result : ops[i].result,
 		ops[i].arg,
-		ops[i].completed_timestamp,
-		ops[i].result,
-		ops[i].replay_result
+		isIdeal ? ops[i].completed_timestamp_ideal : ops[i].completed_timestamp,
+		-1,
+		-1,
+		isIdeal ? ops[i].completed_timestamp_ideal : ops[i].completed_timestamp,
+		ops[i].id
 	       );
     }
     fclose(fp);

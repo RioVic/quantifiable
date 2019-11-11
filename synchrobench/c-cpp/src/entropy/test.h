@@ -12,14 +12,17 @@ typedef enum _operation_type {
 typedef struct operation {
   int id;
   operation_type type;
-  long arg;
-  long long completed_timestamp;
+  int arg;
+  long long unsigned completed_timestamp;
+  long long unsigned completed_timestamp_ideal;
   int result;
   int replay_result;
+  int thread_id;
 } operation_t;
 
 typedef struct thread_data {
   val_t first;
+  int thread_id;
   long range;
   long unit_tx;
   unsigned long nb_add;
@@ -47,6 +50,6 @@ void reset_tests();
 void *test(void *data);
 operation_t *prepare_test(options_t opts, unsigned int *seed);
 void replay(thread_data_t *data);
-void dump_operations(operation_t *ops, int num_ops, char* filename);
+void dump_operations(operation_t *ops, int num_ops, char* filename, int isIdeal);
 
 #endif
