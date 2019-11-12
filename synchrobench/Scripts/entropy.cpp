@@ -71,9 +71,9 @@ void readHistory(std::ifstream &f, std::vector<operation> &v)
 	std::sort(v.begin(), v.end(), compareOperation);
 }
 
-int findWhenContained(int index, int range, int val)
+int findWhenContained(int index, int range, int val, int key)
 {
-	std::cout << "Finding when contained: " << index << "\n";
+	std::cout << "Finding when contained: " << index << " " << val << " " << key << "\n";
 	for (int i = 0; i < range; i++)
 	{
 		int left = index - i;
@@ -97,8 +97,9 @@ int findWhenContained(int index, int range, int val)
 	std::cout << "Error: should not happen\n";
 }
 
-int findWhenNotContained(int index, int range, int val)
+int findWhenNotContained(int index, int range, int val, int key)
 {
+    std::cout << "Finding when not contained: " << index << " " << val << " " << pCase[index].timestamp << " " << key <<"\n";
 	for (int i = 0; i < range; i++)
 	{
 		int left = index - i;
@@ -155,22 +156,22 @@ void setOrder(string filename, int id)
 					{
 						if (iCase[i].result == 1)
 						{
-							pCase[k].inversion = findWhenContained(k, pCase.size(), pCase[k].val);
+							pCase[k].inversion = findWhenContained(k, pCase.size(), pCase[k].val, pCase[k].key);
 						}
 						else if (iCase[i].result == 0)
 						{
-							pCase[k].inversion = findWhenNotContained(k, pCase.size(), pCase[k].val);
+							pCase[k].inversion = findWhenNotContained(k, pCase.size(), pCase[k].val, pCase[k].key);
 						}
 					}
 					else if (pCase[k].name == "ADD")
 					{
 						if (iCase[i].result == 1)
 						{
-							pCase[k].inversion = findWhenNotContained(k, pCase.size(), pCase[k].val);
+							pCase[k].inversion = findWhenNotContained(k, pCase.size(), pCase[k].val, pCase[k].key);
 						}
 						else if (iCase[i].result == 0)
 						{
-							pCase[k].inversion = findWhenContained(k, pCase.size(), pCase[k].val);
+							pCase[k].inversion = findWhenContained(k, pCase.size(), pCase[k].val, pCase[k].key);
 						}
 					}
 				}

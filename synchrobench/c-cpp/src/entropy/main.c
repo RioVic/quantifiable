@@ -70,10 +70,13 @@ int main(int argc, char **argv)
     exit(1);
   }
 	
-  if (opt.seed == 0)
+  if (opt.seed == 0) {
+    int seed = (int)time(0);
+    printf("using time seed: %d\n", seed);
     srand((int)time(0));
-  else
+  } else {
     srand(opt.seed);
+  }
 	
   set = set_new_l();
 	
