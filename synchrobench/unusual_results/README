@@ -1,0 +1,48 @@
+DESCRIPTION OF THE ISSUE
+========================
+
+There is a potential issue with at least linkedlist/lazy-list in synchrobench, or at least the contract for 
+sets implemented in there is not what we normally assume are required for sets. It appears that it's possible 
+for an item's one and only ADD operation to fail in the presence of contention.
+
+HOW TO REPRODUCE
+================
+
+1. First, build the instrumentation for lazy lists
+
+	$ cd synchrobench/c-cpp/src/entropy/
+	$ make
+
+2. Run the instrumentation for a smallish case, maybe 100 adds, 100 deletes, 10 reads, and with at least 
+   2 threads. The more threads, the more likely this will happen.
+
+	$ synchrobench/bin/MUTEX-lazy-list-entropy -a 100 -d 100 -r 10 -t 4
+
+3. Use the inversion counter script under Scripts/ to see if there's any problems.
+
+	$ cd synchrobench/Scripts/
+	$ make
+	$ /a.out ../c-cpp/src/entropy/ops_parallel.dat ../c-cpp/src/entropy/ops_ideal.dat 1
+
+Maybe you have a result like this:
+
+Calculating item number: 0 ...
+ADD
+Finding when not contained: 54 184 1573550628090299337 0
+Error: should not happen
+1	1
+1	1
+ADD	69
+
+We are looking for at least one "Error: should not happen".
+
+If not there, run the instrumentation again to produce new outputs and try again. Also, not all "Error:"s are
+caused by this particular problem so even if there's an error, you might have to try again anyway.
+
+Go to the ops_***.dat files and check for the item, 184 in this case. Verify that despite being the only ADD
+operation for 184, it fails in the parallel case but succeeds in the single threaded case.
+
+INCLUDED FILES
+==============
+
+An example of the outputs ops_parallel.dat and ops_ideal.dat where this problem is found is included.
