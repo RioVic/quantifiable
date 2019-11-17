@@ -6,6 +6,7 @@
 #include <vector>
 #include <algorithm>
 #include <thread>
+#include <map>
 #include <string.h>
 
 #define MAX_PERIOD_LEN 64
@@ -127,53 +128,63 @@ void setOrder(string filename, int id)
 {
 	int findIndex;
 
+	// build index of FIRST occurence of key
+	map<int, int> key2pCaseI;
+	map<int, int> key2iCaseI;
+	for (int i = 0; i < pCase.size(); i++) {
+		if (key2pCaseI.count(pCase[i].key) == 0) {
+			key2pCaseI[pCase[i].key] = i;
+		}
+	}
+	for (int i = 0; i < iCase.size(); i++) {
+		if (key2iCaseI.count(iCase[i].key) == 0) {
+			key2iCaseI[iCase[i].key] = i;
+		}
+	}
+
 	for (int i = id; i < iCase.size(); i+=NUM_THREADS)
 	{
 		if (i % 25000 == 0)
 			std::cout << "Calculating item number: " << i << " ...\n";
 
-		for (int k = 0; k < pCase.size(); k++)
+		int k = key2pCaseI[iCase[i].key];
+
+		if (pCase[k].key == 1)
 		{
-			if (pCase[k].key == iCase[i].key)
+			std::cout << pCase[k].result << "\t" << iCase[i].result << "\n";
+		}
+		if (pCase[k].result == iCase[i].result)
+		{
+			pCase[k].inversion = 0;
+			if (pCase[k].key == 1)
 			{
-				if (pCase[k].key == 1)
+				std::cout << pCase[k].result << "\t" << iCase[i].result << "\n";
+				std::cout << pCase[k].name << "\t" << pCase[k].val << "\n";
+			}
+		}
+		else
+		{
+			std::cout << pCase[k].name << "\n";
+			if (pCase[k].name == "REMOVE" || pCase[k].name == "CONTAINS")
+			{
+				if (iCase[i].result == 1)
 				{
-					std::cout << pCase[k].result << "\t" << iCase[i].result << "\n";
+					pCase[k].inversion = findWhenContained(k, pCase.size(), pCase[k].val, pCase[k].key);
 				}
-				if (pCase[k].result == iCase[i].result)
+				else if (iCase[i].result == 0)
 				{
-					pCase[k].inversion = 0;
-					if (pCase[k].key == 1)
-					{
-						std::cout << pCase[k].result << "\t" << iCase[i].result << "\n";
-						std::cout << pCase[k].name << "\t" << pCase[k].val << "\n";
-					}
+					pCase[k].inversion = findWhenNotContained(k, pCase.size(), pCase[k].val, pCase[k].key);
 				}
-				else
+			}
+			else if (pCase[k].name == "ADD")
+			{
+				if (iCase[i].result == 1)
 				{
-					std::cout << pCase[k].name << "\n";
-					if (pCase[k].name == "REMOVE" || pCase[k].name == "CONTAINS")
-					{
-						if (iCase[i].result == 1)
-						{
-							pCase[k].inversion = findWhenContained(k, pCase.size(), pCase[k].val, pCase[k].key);
-						}
-						else if (iCase[i].result == 0)
-						{
-							pCase[k].inversion = findWhenNotContained(k, pCase.size(), pCase[k].val, pCase[k].key);
-						}
-					}
-					else if (pCase[k].name == "ADD")
-					{
-						if (iCase[i].result == 1)
-						{
-							pCase[k].inversion = findWhenNotContained(k, pCase.size(), pCase[k].val, pCase[k].key);
-						}
-						else if (iCase[i].result == 0)
-						{
-							pCase[k].inversion = findWhenContained(k, pCase.size(), pCase[k].val, pCase[k].key);
-						}
-					}
+					pCase[k].inversion = findWhenNotContained(k, pCase.size(), pCase[k].val, pCase[k].key);
+				}
+				else if (iCase[i].result == 0)
+				{
+					pCase[k].inversion = findWhenContained(k, pCase.size(), pCase[k].val, pCase[k].key);
 				}
 			}
 		}
@@ -193,17 +204,12 @@ void setOrder(string filename, int id)
 	{
 		for (int i = 0; i < pCase.size(); i++)
 		{
-			for (int k = 0; k < iCase.size(); k++)
-			{
-				if (pCase[i].key == iCase[k].key)
-				{
-					ofs << "AMD\t" << benchName << "\t" << iCase[k].name << "\t" << iCase[k].proc << "\t" << iCase[k].result << "\t" << iCase[k].val << "\t" << iCase[k].timestamp << "\t" << "0\t" 
-					<< iCase[k].order << "\t" << pCase[i].name << "\t" << pCase[i].val << "\t" << pCase[i].timestamp << "\t" << "0\t" << i << "\t" << pCase[i].inversion << "\n";
 
-					break;
-				}
-			}
-			
+			int k = key2iCaseI[pCase[i].key];
+
+			ofs << "AMD\t" << benchName << "\t" << iCase[k].name << "\t" << iCase[k].proc << "\t" << iCase[k].result << "\t" << iCase[k].val << "\t" << iCase[k].timestamp << "\t" << "0\t" 
+			<< iCase[k].order << "\t" << pCase[i].name << "\t" << pCase[i].val << "\t" << pCase[i].timestamp << "\t" << "0\t" << i << "\t" << pCase[i].inversion << "\n";
+
 			//ofs << pCase[i].order << "\t" << pCase[i].name << "\t" << pCase[i].val << "\t" << pCase[i].inversion << "\n";
 			//break;
 		}
