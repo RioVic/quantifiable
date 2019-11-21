@@ -1,0 +1,25 @@
+To run the quantifiable benchmarks:
+
+./run_benchmarks.sh
+
+This script compiles the necessary binaries and runs them in loops to create inversion counts for linkedlist/lazy-list.
+
+To then create graphs for those inversion counts:
+
+./generate_graphs.sh
+
+And all the histogram graphs will end up in results/*items/*.pdf.
+
+Experimenting
+=============
+
+To change what is graphed / experimented on, just change the loop values in run_benchmarks.sh and generate_graphs.sh.
+
+
+graph.R
+=======
+
+This script makes a histogram graph of any given set of inversion data files, with any parameters, as long as they are
+all named par1_par2_par3_etc_inversions.dat. From the filenames, it will figure out what parameters are different and
+only display any discriminating ones in the legend.
+

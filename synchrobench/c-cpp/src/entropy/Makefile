@@ -12,7 +12,7 @@ all:	main
 
 main: test.c testutils.h testutils.c options.c options.h
 	$(MAKE) -C $(ROOT)/src/linkedlists/lazy-list/
-	$(CC) $(CFLAGS) -g -I $(INCLUDE) -L$(BUILDIR)/ main.c test.c testutils.c options.c -l:$(LOCK)-lazy-list.a -o $(BINS) $(LDFLAGS) 
+	$(CC) $(CFLAGS) -I $(INCLUDE) -L$(BUILDIR)/ main.c test.c testutils.c options.c -l:$(LOCK)-lazy-list.a -o $(BINS) $(LDFLAGS) 
 
 clean:
 	rm -f $(BINS)

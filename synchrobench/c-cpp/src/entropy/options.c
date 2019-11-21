@@ -16,6 +16,7 @@ options_t read_options(int argc, char** argv) {
   };
 
   options_t options;
+  memset(&options, 0, sizeof options);
   options.thread_num = DEFAULT_THREAD_NUM;
   options.range = DEFAULT_ELEMENT_RANGE;
   options.seed = DEFAULT_SEED;
@@ -84,6 +85,7 @@ options_t read_options(int argc, char** argv) {
       break;
     case 'o':
       strcpy(options.filename, optarg);
+	  break;
     default:
       exit(1);
     }

@@ -74,7 +74,6 @@ void readHistory(std::ifstream &f, std::vector<operation> &v)
 
 int findWhenContained(int index, int range, int val, int key)
 {
-	std::cout << "Finding when contained: " << index << " " << val << " " << key << "\n";
 	for (int i = 0; i < range; i++)
 	{
 		int left = index - i;
@@ -100,7 +99,6 @@ int findWhenContained(int index, int range, int val, int key)
 
 int findWhenNotContained(int index, int range, int val, int key)
 {
-    std::cout << "Finding when not contained: " << index << " " << val << " " << pCase[index].timestamp << " " << key <<"\n";
 	for (int i = 0; i < range; i++)
 	{
 		int left = index - i;
@@ -144,6 +142,8 @@ void setOrder(string filename, int id)
 
 	for (int i = id; i < iCase.size(); i+=NUM_THREADS)
 	{
+		iCase[i].order = i;
+
 		if (i % 25000 == 0)
 			std::cout << "Calculating item number: " << i << " ...\n";
 

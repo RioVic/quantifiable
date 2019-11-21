@@ -96,6 +96,7 @@ int main(int argc, char **argv)
   }
 	
   /* Start threads */
+  printf("crossing barrier in main thread\n");
   barrier_cross(&barrier);
 	
   printf("STARTING...\n");

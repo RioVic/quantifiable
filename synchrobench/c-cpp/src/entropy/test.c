@@ -25,38 +25,43 @@ void reset_tests() {
 void *test(void *data) {
     thread_data_t *d = (thread_data_t *)data;
 
-    /* Wait on barrier */
     barrier_cross(d->barrier);
-
+	printf("Barrier in thread %d crossed\n", d->thread_id);
+    /* Wait on barrier */
+	
+	/* if you ever randomly seg fault, you probably ran into a glibc bug:
+	 * https://bbs.archlinux.org/viewtopic.php?id=219773
+	 * https://sourceware.org/bugzilla/show_bug.cgi?id=20116 */
     while (1) {
-	int this_op = atomic_fetch_add(&opid, 1);
-	if (this_op > d->num_ops) {
-		break;
-	}
+		int this_op = atomic_fetch_add(&opid, 1);
+		if (this_op > d->num_ops) {
+			break;
+		}
+		
 
-	operation_t *op = &d->ops[this_op-1];
-	op->thread_id = d->thread_id;
+		operation_t *op = &d->ops[this_op-1];
+		op->thread_id = d->thread_id;
 
-	switch (op->type) {
-	    case ADD:
-		op->result = set_add_l(d->set, op->arg, TRANSACTIONAL);
-		if (op->result) d->nb_added++;
-		d->nb_add++;
-		break;
-	    case DELETE:
-		op->result = set_remove_l(d->set, op->arg, TRANSACTIONAL);
-		if (op->result) d->nb_removed++;
-		d->nb_remove++;
-		break;
-	    case READ:
-		op->result = set_contains_l(d->set, op->arg, TRANSACTIONAL);
-		if (op->result) d->nb_found++;
-		d->nb_contains++;
-		break;
-	    default:
-		assert(0);
-	}
-	op->completed_timestamp = current_time_ns();
+		switch (op->type) {
+			case ADD:
+			op->result = set_add_l(d->set, op->arg, TRANSACTIONAL);
+			if (op->result) d->nb_added++;
+			d->nb_add++;
+			break;
+			case DELETE:
+			op->result = set_remove_l(d->set, op->arg, TRANSACTIONAL);
+			if (op->result) d->nb_removed++;
+			d->nb_remove++;
+			break;
+			case READ:
+			op->result = set_contains_l(d->set, op->arg, TRANSACTIONAL);
+			if (op->result) d->nb_found++;
+			d->nb_contains++;
+			break;
+			default:
+			assert(0);
+		}
+		op->completed_timestamp = current_time_ns();
         
     } 
 			
@@ -87,7 +92,9 @@ void replay(thread_data_t *d) {
 
 operation_t *prepare_test(options_t opt, unsigned int *seed) {
     int num_ops = opt.add_operations + opt.del_operations + opt.read_operations;
-    operation_t *operations = (operation_t*)malloc(num_ops * sizeof (operation_t));
+	// + 100000 to side-step a glibc bug I encountered, instead of fixing my system.
+	// https://sourceware.org/bugzilla/show_bug.cgi?id=20116
+    operation_t *operations = (operation_t*)malloc((num_ops + 100000) * sizeof (operation_t));
     assert(operations);
     
     int i;
@@ -126,6 +133,7 @@ operation_t *prepare_test(options_t opt, unsigned int *seed) {
 
 
 void dump_operations(operation_t *ops, int num_ops, char* filename, int isIdeal) {
+	printf("opening %s to write operations...\n", filename);
     FILE *fp = fopen(filename, "w");
     fprintf(fp, "arch\talgo\tmethod\tproc\tobject\titem\tinvoke\tfinish\tvisibilityPoint\tprimaryStamp\tkey\n");
 
