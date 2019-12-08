@@ -46,6 +46,7 @@ load_file_to_hist_plot <- function(plot, filename, color, index, start_index=1) 
 						object=as.factor(object), item=as.numeric(item), invoke=as.numeric(invoke), finish=as.numeric(finish),
 						start_order=as.numeric(start_order), method2=as.factor(method2), invoke2=as.numeric(invoke2), finish2=as.numeric(finish2),
 						finish_order=as.numeric(finish_order), inversion=as.numeric(inversion))
+	cat('read table.')
 	zero_time <- min(table$invoke)
 	zero_time
 	table$invoke <- table$invoke - zero_time
@@ -55,7 +56,9 @@ load_file_to_hist_plot <- function(plot, filename, color, index, start_index=1) 
 	table$invoke2 <- table$invoke2 - zero_time
 	table$finish2 <- table$finish2 - zero_time
 	table["call_interval2"] <- table$finish2 - table$invoke2
-	summary(table)
+	cat('starting summary')
+
+	cat('counting inversions now')
 
 	# Count inversions
 
@@ -67,6 +70,7 @@ load_file_to_hist_plot <- function(plot, filename, color, index, start_index=1) 
 	sum2 <- sum(table$invTable2)
 	zero2 <- sum(table$invTable2 == 0)
 	
+	cat('calculating entropyShannon now')
 	# tabulate the discrete probabilities
 	inv <- table(table$invTable2)/(end_index - start_index + 1)
 	Tinv <- as.data.frame(inv)
@@ -80,6 +84,7 @@ load_file_to_hist_plot <- function(plot, filename, color, index, start_index=1) 
 		Tinv$Var1[i] <- Tinv$Var1[i] - 1
 	}
 	
+	cat('generating histogram now')
 	# histograms P(x)
 	plot <- plot + 
 	geom_errorbarh(data = Tinv, mapping = aes(x = Var1, y = Freq, xmin = Var1-0.5, xmax = Var1+0.5), col = color, size=1, height=0) +
@@ -209,8 +214,12 @@ save_hist_plot <- function(output_filename) {
 output_filename <- args[1]
 filenames <- args[2:length(args)]
 
+max_p <- 16
+scale_p_breaks <- 4
+max_y <- 0.10
+
 plot <- ggplot()
-plot <- init_hist_plot(plot, 32, 0.25, 32, 1, filenames)
+plot <- init_hist_plot(plot, max_p, max_y, scale_p_breaks, 1, filenames)
 inversions <- c()
 entropies <- c()
 for (i in 1:length(filenames)) {
@@ -220,6 +229,6 @@ for (i in 1:length(filenames)) {
 	entropies <- c(entropies, inv_ent_plot[2])
 	plot <- inv_ent_plot[3][[1]]
 }
-finish_hist_plot(plot, 32, 0.25, filenames, inversions, entropies)
+finish_hist_plot(plot, max_p, max_y, filenames, inversions, entropies)
 
 save_hist_plot(output_filename)

@@ -2,8 +2,9 @@
 
 set -o xtrace
 
+ARTIFACT="${ARTIFACT:-lazy-list}"
 
-instrument=../../c-cpp/bin/MUTEX-lazy-list-entropy
+instrument=../../c-cpp/bin/MUTEX-"$ARTIFACT"-entropy
 inverter=../a.out
 
 if [ $# -eq 2 ]; then
@@ -19,15 +20,14 @@ pushd ../
 make
 popd
 
-rm -rf results
-mkdir results
+mkdir -p results
 
-for items in 1 2 5 20 100 500; do
+for items in 1 2 5 20; do
 	item_dir=results/"$items"items
-	mkdir $item_dir
-	for sz in 1 16 100; do
-		for threads in 1 2 6; do
-			prefix=AMD_lazylist_"$items"i_"$sz"ko_"$threads"t
+	mkdir -p $item_dir
+	for sz in 500 3000; do
+		for threads in 2 4 6 15 100 1000; do
+			prefix=AMD_"$ARTIFACT"_"$items"i_"$sz"ko_"$threads"t
 			let qs=$sz*250
 			let hs=$sz*500
 			$instrument -a "$qs" -r "$qs" -d "$hs" -t "$threads" -R "$items" -o "$item_dir"/$prefix

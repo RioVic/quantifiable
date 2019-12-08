@@ -26,6 +26,7 @@ test.o: linkedlist-lock.h coupling.h lazy.h intset.h
 
 main: linkedlist-lock.o coupling.o lazy.o intset.o test.o
 	$(CC) $(CFLAGS) $(BUILDIR)/linkedlist-lock.o $(BUILDIR)/lazy.o $(BUILDIR)/coupling.o $(BUILDIR)/intset.o $(BUILDIR)/test.o -o $(BINS) $(LDFLAGS)
+	ar rcs $(BUILDIR)/$(LOCK)-hoh-list.a $(BUILDIR)/linkedlist-lock.o $(BUILDIR)/lazy.o $(BUILDIR)/coupling.o $(BUILDIR)/intset.o
 
 clean:
 	rm -f $(BINS)
