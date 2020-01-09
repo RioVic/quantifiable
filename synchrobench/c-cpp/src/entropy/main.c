@@ -59,6 +59,9 @@ int main(int argc, char **argv)
 	 (int)sizeof(long),
 	 (int)sizeof(void *),
 	 (int)sizeof(uintptr_t));
+
+   assert(opt.add_operations == opt.del_operations);
+   assert(opt.add_operations % opt.range == 0);
 	
 	
   if ((data = (thread_data_t *)malloc(opt.thread_num * sizeof(thread_data_t))) == NULL) {
@@ -85,8 +88,7 @@ int main(int argc, char **argv)
   /* Init STM */
   printf("Initializing STM\n");
 	
-  unsigned int seed = rand();
-  operation_t *operations = prepare_test(opt, &seed);
+  operation_t *operations = prepare_test(opt, (int)opt.seed);
 
   /* Access set from all threads */
   barrier_init(&barrier, opt.thread_num + 1);
@@ -110,7 +112,14 @@ int main(int argc, char **argv)
   }
 
   printf("STOPPED...\n");
-	
+
+  printf("Sorting operations array for replay\n");
+  sort_by_timestamp(operations, opt.add_operations + opt.del_operations + opt.read_operations);
+  
+  for (i = 1; i < opt.add_operations + opt.del_operations + opt.read_operations; i++)
+  {
+    //assert(operations[i].completed_timestamp < operations[i-1].completed_timestamp);
+  }
 	
   print_stats(data, opt.thread_num, set);
 

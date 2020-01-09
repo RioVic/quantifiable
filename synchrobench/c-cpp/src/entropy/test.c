@@ -38,8 +38,7 @@ void *test(void *data) {
 			break;
 		}
 		
-
-		operation_t *op = &d->ops[this_op-1];
+		operation_t *op = &d->ops[this_op];
 		op->thread_id = d->thread_id;
 
 		switch (op->type) {
@@ -90,34 +89,42 @@ void replay(thread_data_t *d) {
     } 
 }
 
-operation_t *prepare_test(options_t opt, unsigned int *seed) {
+operation_t *prepare_test(options_t opt, int seed) {
     int num_ops = opt.add_operations + opt.del_operations + opt.read_operations;
 	// + 100000 to side-step a glibc bug I encountered, instead of fixing my system.
 	// https://sourceware.org/bugzilla/show_bug.cgi?id=20116
-    operation_t *operations = (operation_t*)malloc((num_ops + 100000) * sizeof (operation_t));
+    operation_t *operations = (operation_t*)malloc((num_ops) * sizeof (operation_t));
     assert(operations);
     
     int i;
     int index = 0;
+	int range_arg = 0; //Used to evenly distribute range of values among each operation
     for (i = 0; i < opt.add_operations; i++) {
         operations[index].type = ADD;
-	operations[index].arg = rand_range_re(seed, opt.range);
-	index++;
+		operations[index].arg = range_arg;
+		range_arg = (range_arg + 1) % opt.range;
+		index++;
     }
+
+	range_arg = 0;
     for (i = 0; i < opt.del_operations; i++) {
         operations[index].type = DELETE;
-	operations[index].arg = rand_range_re(seed, opt.range);
-	index++;
+		operations[index].arg = range_arg;
+		range_arg = (range_arg + 1) % opt.range;
+		index++;
     }
+
+	range_arg = 0;
     for (i = 0; i < opt.read_operations; i++) {
         operations[index].type = READ;
-	operations[index].arg = rand_range_re(seed, opt.range);
-	index++;
+		operations[index].arg = range_arg;
+		range_arg = (range_arg + 1) % opt.range;
+		index++;
     }
 
     // scramble.
     for (i = num_ops-1; i >= 0; i--) {
-	int si = rand_range_re(seed, i+1) - 1;
+	int si = (rand()%(i+1));
 	operation_t tmp = operations[si];
 	operations[si] = operations[i];
 	operations[i] = tmp;
@@ -131,6 +138,17 @@ operation_t *prepare_test(options_t opt, unsigned int *seed) {
     return operations;
 }
 
+int compare_timestamp(const void *p_a, const void *p_b)
+{
+	operation_t *a = (operation_t *) p_a;
+	operation_t *b = (operation_t *) p_b;
+	return (a->completed_timestamp - b->completed_timestamp);
+}
+
+void sort_by_timestamp(operation_t *operations, int num_ops)
+{
+	qsort(operations, num_ops, sizeof(operation_t), compare_timestamp);
+}
 
 void dump_operations(operation_t *ops, int num_ops, char* filename, int isIdeal) {
 	printf("opening %s to write operations...\n", filename);
