@@ -17,6 +17,7 @@ long long current_time_ns (void)
 }
 
 int opid = 0;
+int thread_num = 0;
 
 void reset_tests() {
     opid = 0;
@@ -29,17 +30,17 @@ void *test(void *data) {
 	printf("Barrier in thread %d crossed\n", d->thread_id);
     /* Wait on barrier */
 	
-	/* if you ever randomly seg fault, you probably ran into a glibc bug:
-	 * https://bbs.archlinux.org/viewtopic.php?id=219773
-	 * https://sourceware.org/bugzilla/show_bug.cgi?id=20116 */
+	int i = 0;
     while (1) {
-		int this_op = atomic_fetch_add(&opid, 1);
+		int this_op = d->thread_id + (thread_num * i);
+
 		if (this_op > d->num_ops) {
 			break;
 		}
 		
 		operation_t *op = &d->ops[this_op];
 		op->thread_id = d->thread_id;
+		op->completed_timestamp = current_time_ns();
 
 		switch (op->type) {
 			case ADD:
@@ -60,8 +61,7 @@ void *test(void *data) {
 			default:
 			assert(0);
 		}
-		op->completed_timestamp = current_time_ns();
-        
+        i++;
     } 
 			
     return NULL;
@@ -95,6 +95,8 @@ operation_t *prepare_test(options_t opt, int seed) {
 	// https://sourceware.org/bugzilla/show_bug.cgi?id=20116
     operation_t *operations = (operation_t*)malloc((num_ops) * sizeof (operation_t));
     assert(operations);
+
+	thread_num = opt.thread_num;
     
     int i;
     int index = 0;
