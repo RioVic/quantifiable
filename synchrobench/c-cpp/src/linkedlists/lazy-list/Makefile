@@ -24,9 +24,14 @@ intset.o: linkedlist-lock.h coupling.h lazy.h
 test.o: linkedlist-lock.h coupling.h lazy.h intset.h
 	$(CC) $(CFLAGS) -c -o $(BUILDIR)/test.o test.c
 
-main: linkedlist-lock.o coupling.o lazy.o intset.o test.o
-	$(CC) $(CFLAGS) $(BUILDIR)/linkedlist-lock.o $(BUILDIR)/lazy.o $(BUILDIR)/coupling.o $(BUILDIR)/intset.o $(BUILDIR)/test.o -o $(BINS) $(LDFLAGS)
-	ar rcs $(BUILDIR)/$(LOCK)-lazy-list.a $(BUILDIR)/linkedlist-lock.o $(BUILDIR)/lazy.o $(BUILDIR)/coupling.o $(BUILDIR)/intset.o
+options.o: testutils.h intset.o
+	$(CC) $(CFLAGS) -c -o $(BUILDIR)/options.o options.c
+
+testutils.o: intset.o
+	$(CC) $(CFLAGS) -c -o $(BUILDIR)/testutils.o testutils.c
+
+main: linkedlist-lock.o coupling.o lazy.o intset.o test.o options.o testutils.o
+	$(CC) $(CFLAGS) $(BUILDIR)/linkedlist-lock.o $(BUILDIR)/lazy.o $(BUILDIR)/coupling.o $(BUILDIR)/intset.o $(BUILDIR)/test.o $(BUILDIR)/options.o $(BUILDIR)/testutils.o main.c -o $(BINS) $(LDFLAGS)
 
 
 clean:
