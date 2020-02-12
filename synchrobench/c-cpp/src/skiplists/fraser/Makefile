@@ -34,8 +34,8 @@ TARGETS    += skip_stm_fraser skip_stm_herlihy skip_stm_lock
 
 all: main cleanbuild
 
-main: intset.o ptst.h set.h skip_cas.o gc.o ptst.o portable_defns.h sparc_defns.h intel_defns.h intset.h
-	$(CC) $(CFLAGS) intset.o gc.o ptst.o skip_cas.o test.c -o $(BINS) $(LDFLAGS)
+main: intset.o ptst.h set.h skip_cas.o gc.o ptst.o portable_defns.h sparc_defns.h intel_defns.h intset.h testutils.h options.h
+	$(CC) $(CFLAGS) intset.o gc.o ptst.o skip_cas.o test.c testutils.c options.c main.c -o $(BINS) $(LDFLAGS)
 
 cleanbuild:
 	rm -f *~ core *.o *.a
