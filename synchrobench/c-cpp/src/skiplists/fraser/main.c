@@ -116,6 +116,11 @@ int main(int argc, char **argv)
     srand(opt.seed);
   }
 	
+  /* create the skip list set and do inits */
+	_init_ptst_subsystem();
+  _init_gc_subsystem();
+  _init_set_subsystem();
+  set = set_alloc();
   set = set_alloc();
 	
   /* Init STM */

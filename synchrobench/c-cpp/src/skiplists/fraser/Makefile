@@ -14,7 +14,7 @@ else
     ARCH = SPARC
 endif
 
-CFLAGS      += -D$(ARCH) -Wno-unused-value -Wno-format #-fomit-frame-pointer
+CFLAGS      += -D$(ARCH) -Wno-unused-value -Wno-format -g #-fomit-frame-pointer
 
 #CFLAGS      += $(DEBUGGING)
 COMMON_DEPS += Makefile $(wildcard *.h)
