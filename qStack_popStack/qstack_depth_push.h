@@ -11,16 +11,21 @@
 #define MAX_FORK_AT_NODE 3
 #define MAX_DEPTH_DISPARITY 5
 
+#ifndef OPERATION
+#define OPERATION
+
 enum Operation { Push, Pop, Fork };
 
+#endif
+
 template<typename T>
-class QStack
+class Qstack_Depth_Push
 {
 public:
 	class Desc;
 	class Node;
 
-	QStack(int num_threads, int num_ops) :
+	Qstack_Depth_Push(int num_threads, int num_ops) :
 		num_threads(num_threads),
 		forkRequest(0)
 	{
@@ -34,8 +39,6 @@ public:
 			threadIndex.push_back(0);
 			topDepth[i*8] = 0;
 
-			std::cout << threadIndex[i] << "\n";
-
 			NodeAlloc[i] = new Node[num_ops];
 			DescAlloc[i] = new Desc[num_ops];
 		}
@@ -45,7 +48,7 @@ public:
 		top[0] = s;
 	}
 
-	~QStack()
+	~Qstack_Depth_Push()
 	{
 		for (int i = 0; i < num_threads; i++)
 		{
@@ -80,7 +83,7 @@ private:
 };
 
 template<typename T>
-bool QStack<T>::push(int tid, int opn, T v)
+bool Qstack_Depth_Push<T>::push(int tid, int opn, T v)
 {
 	//Extract pre-allocated node
 	Node *elem = &NodeAlloc[tid][opn];
@@ -189,7 +192,7 @@ bool QStack<T>::push(int tid, int opn, T v)
 }
 
 template<typename T>
-bool QStack<T>::pop(int tid, int opn, T& v)
+bool Qstack_Depth_Push<T>::pop(int tid, int opn, T& v)
 {
 	int loop = 0;
 	Desc *d = &DescAlloc[tid][opn];
@@ -197,6 +200,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 	while (true)
 	{
 		int headIndex = threadIndex[tid];
+
 		Node *cur = top[headIndex].load();
 
 		if (cur == nullptr) 
@@ -270,7 +274,7 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 
 //Adds an arbitrary operation to the stack
 template<typename T>
-bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
+bool Qstack_Depth_Push<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 {
 	//Since this node is at the head, we know it has room for at least 1 more predecessor, so we add our current element
 	cur->addPred(elem);
@@ -303,11 +307,13 @@ bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 			}
 		}
 	}
+
+	return true;
 }
 
 //Removes an arbitrary operation from the stack
 template<typename T>
-bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
+bool Qstack_Depth_Push<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
 {
 	//Check that the pred array is empty, and that a safe pop can occur
 	if (cur->hasNoPreds() && cur->notInTop(top, num_threads, headIndex))
@@ -330,7 +336,7 @@ bool QStack<T>::remove(int tid, int opn, T &v, int headIndex, Node *cur)
 }
 
 template<typename T>
-void QStack<T>::dumpNodes(std::ofstream &p)
+void Qstack_Depth_Push<T>::dumpNodes(std::ofstream &p)
 {
 	for (int i = 0; i < this->num_threads; i++)
 	{
@@ -350,7 +356,7 @@ void QStack<T>::dumpNodes(std::ofstream &p)
 }
 
 template<typename T>
-class QStack<T>::Node
+class Qstack_Depth_Push<T>::Node
 {
 public:
 	Node (T &v) : _val(v), _pred(), desc(nullptr) {};
@@ -371,7 +377,7 @@ public:
 	void type(Operation type) { _type = type; };
 	Operation type() { return _type; };
 
-	int depth(int d) { _depth = d; };
+	void depth(int d) { _depth = d; };
 	int depth() { return _depth; };
 
 
@@ -446,10 +452,10 @@ public:
 	void level(int i) { _branch_level = i; };
 	int level() { return _branch_level; };
 
-	//void desc(std::atomic<QStack::Desc *> desc) { _desc = desc; };
-	//std::atomic<QStack::Desc> desc() { return _desc; };
+	//void desc(std::atomic<Qstack_Depth_Push::Desc *> desc) { _desc = desc; };
+	//std::atomic<Qstack_Depth_Push::Desc> desc() { return _desc; };
 
-	std::atomic<QStack::Desc *> desc;
+	std::atomic<Qstack_Depth_Push::Desc *> desc;
 
 private:
 	T _val {NULL};
@@ -464,7 +470,7 @@ private:
 };
 
 template<typename T>
-class QStack<T>::Desc
+class Qstack_Depth_Push<T>::Desc
 {
 public:
 	Desc (Operation op) : _op(op) { active = true; };

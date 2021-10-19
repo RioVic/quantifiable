@@ -10,7 +10,12 @@
 #define CAS_LIMIT 1
 #define MAX_FORK_AT_NODE 3
 
+#ifndef OPERATION
+#define OPERATION
+
 enum Operation { Push, Pop, Fork };
+
+#endif
 
 template<typename T>
 class QStack
@@ -110,7 +115,6 @@ bool QStack<T>::push(int tid, int opn, T v)
 			//Place our descriptor in the node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
-				//Check for ABA?
 				if (top[headIndex] != cur)
 				{
 					cur->desc = nullptr;
@@ -276,6 +280,8 @@ bool QStack<T>::add(int tid, int opn, T v, int headIndex, Node *cur, Node *elem)
 			}
 		}
 	}
+
+	return true;
 }
 
 //Removes an arbitrary operation from the stack
