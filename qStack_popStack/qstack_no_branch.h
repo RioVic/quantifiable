@@ -95,7 +95,7 @@ bool QStack_NoBranch<T>::push(int tid, int opn, T v)
 		}
 		else //Inverse Stack Case (Perform Remove)
 		{
-			std::cout << "Push: Inverse Case\n";
+			//std::cout << "Push: Inverse Case\n";
 			if (top[tid].compare_exchange_weak(cur, cur->next()))
 			{
 				continue;
@@ -121,7 +121,7 @@ bool QStack_NoBranch<T>::pop(int tid, int opn, T& v)
 		//Inverse Stack Case (Perform Add)
 		if (cur->isSentinel() || cur->type() == Pop)
 		{
-			std::cout << "Pop: Inverse Case\n";
+			//std::cout << "Pop: Inverse Case\n";
 			Node *newNode = &NodeAlloc[tid][opn];
 			newNode->type(Pop);
 			newNode->next(cur);

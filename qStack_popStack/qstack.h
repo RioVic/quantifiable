@@ -193,7 +193,6 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 			//Place descriptor in node
 			if (cur->desc.compare_exchange_weak(cur_desc, d))
 			{
-				//Check for ABA?
 				if (top[headIndex] != cur)
 				{
 					cur->desc = nullptr;
@@ -213,16 +212,31 @@ bool QStack<T>::pop(int tid, int opn, T& v)
 				}
 				else
 				{
-					//Attempt to remove as normal
-					if (!this->remove(tid, opn, v, headIndex, cur))
+					//Get second descriptor
+					Node *cur_next = cur->next();
+					Desc *next_desc = cur_next->desc.load();
+
+					if ((next_desc == nullptr || next_desc->active == false) && cur_next->desc.compare_exchange_weak(next_desc, d))
 					{
-						cur->desc = nullptr;
-						threadIndex[tid] = (headIndex + 1) % this->num_threads;
+						//Attempt to remove as normal
+						if (!this->remove(tid, opn, v, headIndex, cur))
+						{
+							//Remove both descriptors
+							cur->desc = nullptr;
+							cur_next->desc = nullptr;
+							threadIndex[tid] = (headIndex + 1) % this->num_threads;
+						}
+						else
+						{
+							//Success
+							d->active = false;
+							return true;
+						}
 					}
 					else
 					{
-						d->active = false;
-						return true;
+						//Failed to get second descriptor
+						cur->desc = nullptr;
 					}
 				}
 			}
